@@ -88,60 +88,15 @@ Detailed design: [`docs/architecture.md`](docs/architecture.md)
 }
 ```
 
-## Repository
-
-```text
-n8n-ecommerce-ops-automation/
-├─ README.md
-├─ docker-compose.yml
-├─ .env.example
-├─ workflows/
-│  ├─ ecommerce-order-intake.json
-│  ├─ ecommerce-error-handler.json
-│  └─ ecommerce-daily-summary.json
-├─ mock-api/
-│  ├─ package.json
-│  ├─ src/server.ts
-│  ├─ dist/server.js
-│  └─ README.md
-├─ db/
-│  ├─ schema.sql
-│  └─ seed.sql
-├─ fixtures/
-│  ├─ shopify_orders.json
-│  ├─ amazon_orders.csv
-│  ├─ marketplace_orders.csv
-│  ├─ inventory.csv
-│  └─ sku_master.csv
-├─ scripts/
-│  ├─ generate_fixtures.py
-│  ├─ generate_workflows.py
-│  ├─ send-webhook.sh / .ps1
-│  ├─ send-all-fixtures.py
-│  ├─ run-smoke.sh / .ps1
-│  ├─ smoke_harness.py
-│  ├─ verify-results.py
-│  └─ verify-workflows.mjs
-├─ docs/
-│  ├─ architecture.md
-│  ├─ failure-scenarios.md
-│  ├─ portfolio-case-study.md
-│  ├─ demo-video-script.md
-│  └─ application-intro.md
-├─ screenshots/
-└─ generated/
-```
-
 ## Tech stack
 
-- n8n **2.37.10 stable** reference version
-- PostgreSQL **17.11** / Supabase-compatible SQL
+- n8n **2.37.10** pinned Docker image
+- PostgreSQL **17.11** pinned Alpine image / Supabase-compatible SQL
 - Node.js 22 mock API
 - TypeScript source with dependency-free prebuilt JS runtime
-- Python 3 standard-library smoke harness
+- Python 3 standard-library deterministic smoke harness
 - Docker Compose for reproducible local topology
-
-The n8n Docker image is pinned rather than using a floating tag. n8n recommends the Stable release track for mission-critical workloads. The workflow uses Postgres query parameters instead of interpolating raw payload values into SQL. See n8n's current security audit guidance for SQL-expression/query-parameter review.
+- GitHub Actions for deterministic contract and live container regression
 
 ## Quick start — deterministic smoke test
 
@@ -207,9 +162,11 @@ Copy-Item .env.example .env
 docker compose up -d
 ```
 
-### PostgreSQL 16 -> 17 local demo reset
+The n8n UI is available at `http://localhost:5678/` after the service is ready.
 
-The PostgreSQL 17 upgrade intentionally uses a new Compose volume key, `postgres17_data`. This avoids trying to open a PostgreSQL 16 data directory with PostgreSQL 17. Because this repository contains synthetic demo data, the new PostgreSQL 17 volume is initialized from `db/schema.sql` and `db/seed.sql`. The previous `postgres_data` volume is left untouched for rollback/inspection and may be removed manually only after the PostgreSQL 17 demo is verified. n8n database state stored in the old PostgreSQL volume is not migrated automatically, so workflows/credentials must be re-imported/recreated for the post-upgrade regression run.
+### PostgreSQL 16 → 17 local demo reset
+
+The PostgreSQL 17 upgrade intentionally uses a new Compose volume key, `postgres17_data`. This avoids trying to open a PostgreSQL 16 data directory with PostgreSQL 17. Because this repository contains synthetic demo data, the new PostgreSQL 17 volume is initialized from `db/schema.sql` and `db/seed.sql`. A previous PostgreSQL 16 volume is not migrated automatically.
 
 4. Import the workflows:
 
@@ -219,7 +176,7 @@ docker compose exec -T n8n n8n import:workflow --input=/workflows/ecommerce-erro
 docker compose exec -T n8n n8n import:workflow --input=/workflows/ecommerce-daily-summary.json
 ```
 
-5. In n8n, create one **Postgres** credential pointing to the `ecommerce_ops` database and attach it to all Postgres nodes. The workflow JSON intentionally contains no credential ID, password, or API key.
+5. In n8n, create one **Postgres** credential pointing to the `ecommerce_ops` database and attach it to all Postgres nodes. Workflow JSON intentionally contains no credential ID, password, or API key.
 
 6. Set `E-commerce Ops - Global Error Handler` as the error workflow for the intake workflow, then publish/activate the required workflows.
 
@@ -235,37 +192,9 @@ Or send all 42 synthetic rows after the intake webhook is active:
 python scripts/send-all-fixtures.py
 ```
 
-## Supabase mapping
-
-The SQL in `db/schema.sql` runs on PostgreSQL and is suitable for a Supabase PostgreSQL database. For a Supabase-backed delivery:
-
-- run `schema.sql` and `seed.sql` in a non-production project first
-- configure an n8n Postgres credential using the Supabase connection details
-- keep credentials in n8n's credential store, not workflow JSON
-- review network access, SSL mode, connection pooling, RLS/service-role boundaries, and retention before production use
-
 ## Synthetic fixture coverage
 
-The corpus contains **42 deterministic rows** across the three source schemas. It includes:
-
-- normal webhook orders
-- normal CSV orders
-- repeated SKUs across orders
-- duplicate Shopify delivery
-- duplicate Amazon CSV order
-- cancelled orders
-- missing SKU
-- unknown SKU
-- zero / negative quantity
-- insufficient stock
-- malformed email
-- missing order field
-- invalid currency
-- non-numeric CSV quantity
-- fail twice then succeed
-- always-500
-- timeout
-- post-commit notification failure
+The corpus contains **42 deterministic rows** across three source schemas, including normal orders, duplicates, cancellations, missing/unknown SKUs, invalid quantities, insufficient stock, malformed email/input, invalid currency, temporary failures, permanent failures, timeout behavior, and post-commit notification failure.
 
 See [`docs/failure-scenarios.md`](docs/failure-scenarios.md).
 
@@ -279,38 +208,60 @@ Generated from the 42 repository fixtures:
 |---|---:|
 | Fixture rows | 42 |
 | Orders processed | 26 |
-| Successful | 26 |
-| Cancelled | 3 |
 | Exceptions | 17 |
+| Cancelled | 3 |
 | Duplicates ignored | 2 |
 | Retry recovered | 1 |
 | Dead-letter jobs | 2 |
 
 All Tests **A-I pass** in the deterministic contract harness. The harness replays the complete dataset against a cloned database and verifies that order count and inventory remain unchanged.
 
-### Live n8n/PostgreSQL pre-upgrade baseline
+### Post-upgrade live n8n/PostgreSQL regression
 
-A prior real local demo run against n8n + PostgreSQL + the mock API also completed Tests **A-I (9/9)** with these database-derived totals:
+A GitHub-hosted Ubuntu runner executed the real Docker Compose topology at commit `9105fb0faaf2dcd00ccec9e62dfb20f38bd2a03f` in Actions run **34064393045**. The run used synthetic data only and completed successfully against **n8n 2.37.10** and **PostgreSQL 17.11**.
+
+Verified paths:
+
+- workflow structural/security verification
+- credential import and all three workflow imports
+- exact workflow names/IDs
+- workflow publish/activation
+- normal order processing
+- duplicate suppression
+- unknown SKU exception
+- insufficient-stock exception
+- temporary failure recovery after retry
+- exhausted 500 failure → dead letter after 3 attempts
+- permanent 400 failure → dead letter without retry
+- cancelled-order exception
+- re-run safety with unchanged order count and inventory
+- database-derived Daily Summary reconciliation
+- Asia/Seoul calendar-date reconciliation
+- error-workflow binding
+- PostgreSQL compatibility log check
+
+Database/Daily Summary totals for this focused P13 scenario set:
 
 | Metric | Result |
 |---|---:|
-| Successful orders | 5 |
-| Exceptions | 9 |
+| Successful | 2 |
+| Exceptions | 7 |
 | Cancelled | 1 |
 | Duplicates ignored | 2 |
 | Retry recovered | 1 |
-| Permanent failures | 4 |
+| Permanent failures / dead-letter jobs | 2 |
 
-The daily-summary workflow returned the same six values as the database aggregate. These are synthetic demo results, not customer/production metrics. They are retained as the **pre-upgrade live baseline** only. After the PostgreSQL 17.11 / n8n 2.37.10 change, a fresh P13 live regression is required before calling the upgraded runtime PASS.
+The Daily Summary produced the same six values for **2026-09-07 Asia/Seoul**. Runtime evidence was uploaded by the workflow as the `p13-runtime-evidence` artifact.
 
-### Verification scope
+### Historical pre-upgrade baseline
 
-- **Repository harness:** mock API runtime, all 42 fixtures, validation/idempotency/inventory/retry/dead-letter logic, notification failure, re-run invariants, DB-derived summary, workflow JSON structural/security checks.
-- **Historical live baseline:** actual n8n/PostgreSQL/mock-API execution before the P12 runtime upgrade.
-- **Current runtime target:** PostgreSQL 17.11 + n8n 2.37.10.
-- **Still required:** post-upgrade P13 live import/execution regression.
+A prior local synthetic run before the PostgreSQL 17.11 / n8n 2.37.10 upgrade produced 5 successful orders, 9 exceptions, 1 cancellation, 2 ignored duplicates, 1 retry recovery, and 4 permanent failures. It is retained only as historical evidence and is not used as the upgraded-runtime result.
 
-`generated/smoke-report.json` records the deterministic contract harness result and does not claim to be a production/Supabase deployment.
+## Verification scope
+
+- **Repository harness:** deterministic contract behavior over all 42 synthetic fixtures.
+- **Current live runtime:** actual n8n 2.37.10 + PostgreSQL 17.11 + mock API Docker topology in GitHub Actions.
+- **Evidence boundary:** these tests establish reproducible demo behavior; they do not establish customer-specific production performance, uptime, ROI, settlement correctness, or accounting correctness.
 
 ## Exception codes
 
@@ -332,32 +283,31 @@ The daily-summary workflow returned the same six values as the database aggregat
 
 ## Screenshots
 
-The repository intentionally does not fabricate n8n execution screenshots. After importing/running the workflows, capture the real execution UI using [`screenshots/README.md`](screenshots/README.md) as a checklist.
+The repository intentionally does not fabricate n8n execution screenshots. [`screenshots/README.md`](screenshots/README.md) is the capture checklist for real UI evidence. GitHub Actions runtime logs/artifacts are automated evidence, not substitutes for screenshots in a visual portfolio presentation.
 
 ## Security notes
 
-- No credential IDs, tokens, API keys, or customer data are committed.
-- `.env` is ignored.
+- No credential IDs, tokens, API keys, or customer data are intended to be committed.
+- `.env` is ignored; `.env.example` contains placeholders only.
+- CI creates temporary random database/encryption credentials and removes the local `.env` during cleanup.
 - SQL business inputs use query parameters.
 - Webhook authentication/signature verification is a **production requirement** and intentionally documented rather than faked in the local mock.
-- Raw payload retention and PII redaction must be adjusted to the customer's requirements.
-- The demo does not perform accounting/tax reconciliation or claim settlement correctness.
+- Raw payload retention and PII redaction must be adjusted to customer requirements.
 
 ## Limitations
 
 - The mock warehouse API is deterministic and local; it does not model every vendor-specific timeout or rate-limit behavior.
-- CSV ingestion in the demo is row-based: `send-all-fixtures.py` reads the synthetic CSV files and sends each row to the n8n intake boundary. A real client delivery would usually ingest/download files inside n8n or from object storage/SFTP according to the source contract.
-- The smoke harness verifies the same business invariants without requiring Docker, but it is not a substitute for staging execution against the target n8n/PostgreSQL/Supabase environment.
+- CSV ingestion is row-based in the demo; a client delivery would usually ingest/download files inside n8n or from object storage/SFTP according to the source contract.
 - Manual review UI is represented by structured exception records/status fields; a customer-specific admin UI is outside this portfolio scope.
+- The current n8n container emits a Python task-runner availability warning. This demo executes JavaScript Code nodes and the verified P13 paths completed successfully; deployments that require Python task runners should configure the appropriate production runner topology.
+- The repository does not claim production merchant experience, production uptime, accounting/tax correctness, or financial ROI.
 
-## Portfolio case study
+## Portfolio materials
 
-See [`docs/portfolio-case-study.md`](docs/portfolio-case-study.md).
-
-## 2-minute demo script
-
-See [`docs/demo-video-script.md`](docs/demo-video-script.md).
-
-## Short application introduction
-
-See [`docs/application-intro.md`](docs/application-intro.md).
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/failure-scenarios.md`](docs/failure-scenarios.md)
+- [`docs/test-results.md`](docs/test-results.md)
+- [`docs/repository-audit.md`](docs/repository-audit.md)
+- [`docs/portfolio-case-study.md`](docs/portfolio-case-study.md)
+- [`docs/demo-video-script.md`](docs/demo-video-script.md)
+- [`docs/application-intro.md`](docs/application-intro.md)

@@ -5,6 +5,8 @@ on:
   push:
     paths:
       - '.github/workflows/runtime-regression.yml'
+      - 'README.md'
+      - 'docs/**'
       - 'docker-compose.yml'
       - 'db/**'
       - 'workflows/**'

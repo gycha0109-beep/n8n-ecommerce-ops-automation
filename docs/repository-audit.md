@@ -1,27 +1,69 @@
-# Repository Consistency Audit - P10 to P12
+# Repository Consistency Audit - P10 to P18
 
 Date: 2026-09-07
 
-## Findings corrected
+## Corrections completed
 
-- Workflow exports were fixed previously, but `scripts/generate_workflows.py` still regenerated deprecated `.item.json` references and blocked `$env` expressions.
-- Three workflow display names contained broken `??` substitutions; the generator still used Unicode em dashes.
-- The workflow generator omitted top-level workflow IDs, so regeneration could recreate CLI-import-invalid exports.
-- Four generated CSV fixtures contained UTF-8 BOMs.
-- Linux shell scripts were stored without executable mode, causing GitHub Actions `Permission denied`.
-- Current documentation still described n8n 2.37.7 / PostgreSQL 16 and mixed deterministic harness evidence with the real local demo baseline.
-- Compose embedded fallback demo secrets for the PostgreSQL password and n8n encryption key.
-- Compose still targeted PostgreSQL 16 and reused the PostgreSQL 16 volume path/key, which is unsafe for a direct major-version container swap.
-- Mock integration environment variables remained in Compose although the verified workflow exports use Docker-service URLs directly.
+- Removed deprecated n8n `.item` expression dependencies from generated exports and generator logic.
+- Removed blocked `$env` workflow expressions in favor of Docker-service demo URLs.
+- Replaced broken `??`/Unicode-sensitive workflow display names with ASCII-safe canonical names.
+- Preserved stable top-level workflow IDs/version IDs through regeneration.
+- Rejected UTF-8 BOMs in workflow verification and regenerated fixtures/workflows without BOM.
+- Corrected shell execution portability so GitHub Actions can execute repository scripts.
+- Removed Compose fallback demo secrets; required password/encryption values come from `.env`.
+- Kept `.env` ignored and out of the committed Git tree.
+- Upgraded/pinned runtime to n8n 2.37.10 and PostgreSQL 17.11 Alpine.
+- Moved PostgreSQL 17 to `postgres17_data` rather than reusing a PostgreSQL 16 major-version data directory.
+- Separated deterministic harness evidence, historical pre-upgrade live evidence, and current post-upgrade live evidence.
+- Added an automated P13 Docker runtime regression and runtime evidence artifact upload.
+- Fixed CI temp-file ownership/permissions so restrictive credential/workflow import files remain `0600` while readable by the n8n `node` user.
+- Added README/docs to the runtime-regression path gate so verification claims trigger fresh runtime evidence.
 
-## Corrections
+## P13 post-upgrade runtime evidence
 
-- Generator and exports now use `.first().json` and direct `http://mock-api:3000/...` demo endpoints.
-- Names are ASCII-safe: `E-commerce Order Intake - Reliability Demo`, `E-commerce Ops - Global Error Handler`, and `E-commerce Daily Summary`.
-- Stable top-level workflow IDs/version IDs are preserved by the generator.
-- Generated fixtures/workflows are UTF-8 without BOM.
-- Shell scripts are committed executable.
-- Compose pins n8n 2.37.10 and PostgreSQL 17.11 Alpine.
-- Required password/encryption values must come from `.env`; `.env` remains ignored.
-- PostgreSQL 17 uses `postgres17_data`, leaving the old PostgreSQL 16 volume untouched.
-- Documentation separates deterministic harness results from the historical live n8n baseline and explicitly marks P13 post-upgrade regression as pending.
+At commit `9105fb0faaf2dcd00ccec9e62dfb20f38bd2a03f`, GitHub Actions run `34064393045` completed the live Docker regression successfully using synthetic data only.
+
+Verified runtime:
+
+- n8n 2.37.10
+- PostgreSQL 17.11
+- workflow credential import
+- all three workflow imports and publish/activation
+- normal, duplicate, unknown-SKU, insufficient-stock, retry-recovery, 500-DLQ, permanent-400-DLQ, cancelled, and re-run-safety paths
+- Daily Summary/database reconciliation: `2 / 7 / 1 / 2 / 1 / 2`
+- Asia/Seoul summary date: 2026-09-07
+- error-workflow binding
+- no PostgreSQL incompatibility message matched by the regression log check
+- runtime evidence artifact upload
+
+The same commit's `portfolio-smoke` workflow also completed successfully.
+
+## P18 current-state audit
+
+### Runtime and workflow integrity
+
+- Current Compose pins PostgreSQL 17.11 and n8n 2.37.10.
+- Workflow verifier validates JSON parseability, IDs/version IDs, names, graph connections, reliability nodes, retry intervals, direct mock-service URLs, and Asia/Seoul summary semantics.
+- P13 proves import/publish/activation and focused live behavior on an actual Docker Compose topology.
+
+### Security / repository hygiene
+
+- `.env` is ignored and is not present in the current Git tree.
+- Workflow exports contain no credential binding IDs or committed runtime passwords/API keys by design.
+- P13 credentials are random, temporary, restrictive-permission files and are removed during cleanup.
+- All committed customer/order data is synthetic.
+
+### Evidence and claims
+
+- 42-fixture contract harness results remain distinct from the focused P13 live runtime totals.
+- Historical pre-upgrade totals remain explicitly historical.
+- No production ROI, real-client, accounting, settlement, or uptime claim is made.
+- Real n8n UI screenshots are not fabricated; `screenshots/README.md` remains the capture checklist for a visual portfolio package.
+
+### Non-blocking note
+
+The n8n image logs a Python task-runner availability warning. This repository's verified Code nodes use JavaScript, so it did not affect P13. Python-runner capability is not claimed.
+
+## Final acceptance state
+
+The code/runtime evidence required for P10-P15 and P17-P18 is complete subject to the final documentation commit itself receiving green `portfolio-smoke` and `p13-runtime-regression` checks. P16's repository-side screenshot checklist is complete; actual UI screenshots remain a manual visual-portfolio capture because fabricated screenshots are intentionally prohibited.
