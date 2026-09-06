@@ -38,7 +38,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT (SELECT count(*) FROM orders WHERE processed_at >= date_trunc('day', now()))::int AS successful, (SELECT count(*) FROM exceptions WHERE created_at >= date_trunc('day', now()))::int AS exceptions, (SELECT count(*) FROM exceptions WHERE created_at >= date_trunc('day', now()) AND error_code='ORDER_CANCELLED')::int AS cancelled, (SELECT count(*) FROM exceptions WHERE created_at >= date_trunc('day', now()) AND error_code='DUPLICATE_ORDER')::int AS duplicates_ignored, (SELECT count(*) FROM orders WHERE processed_at >= date_trunc('day', now()) AND retry_recovered)::int AS retry_recovered, (SELECT count(*) FROM failed_jobs WHERE created_at >= date_trunc('day', now()) AND status='dead_letter')::int AS permanent_failures;",
+        "query": "WITH bounds AS (SELECT (date_trunc('day', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul') AS start_at, ((date_trunc('day', now() AT TIME ZONE 'Asia/Seoul') + interval '1 day') AT TIME ZONE 'Asia/Seoul') AS end_at) SELECT (SELECT count(*) FROM orders WHERE processed_at >= b.start_at AND processed_at < b.end_at)::int AS successful, (SELECT count(*) FROM exceptions WHERE created_at >= b.start_at AND created_at < b.end_at)::int AS exceptions, (SELECT count(*) FROM exceptions WHERE created_at >= b.start_at AND created_at < b.end_at AND error_code='ORDER_CANCELLED')::int AS cancelled, (SELECT count(*) FROM exceptions WHERE created_at >= b.start_at AND created_at < b.end_at AND error_code='DUPLICATE_ORDER')::int AS duplicates_ignored, (SELECT count(*) FROM orders WHERE processed_at >= b.start_at AND processed_at < b.end_at AND retry_recovered)::int AS retry_recovered, (SELECT count(*) FROM failed_jobs WHERE created_at >= b.start_at AND created_at < b.end_at AND status='dead_letter')::int AS permanent_failures FROM bounds b;",
         "options": {}
       },
       "id": "b1cc84ca-0124-5ffb-9527-7b5b28517efd",
@@ -52,7 +52,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return [{json:{event:'daily_summary',date:new Date().toISOString().slice(0,10),...$json}}];"
+        "jsCode": "const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()); const p=Object.fromEntries(parts.map(({type,value})=>[type,value])); const date=`${p.year}-${p.month}-${p.day}`; return [{json:{event:'daily_summary',date,...$json}}];"
       },
       "id": "52d7f2ea-e447-5724-9213-8e8978301f4e",
       "name": "Build Summary Message",

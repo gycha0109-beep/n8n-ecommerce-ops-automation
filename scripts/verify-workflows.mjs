@@ -68,6 +68,10 @@ const executeTrigger = summary.nodes.find((node) => node.type === 'n8n-nodes-bas
 if (!executeTrigger || executeTrigger.typeVersion !== 1.1 || executeTrigger.parameters?.inputSource !== 'passthrough') {
   throw new Error('summary: no CLI-compatible execute workflow trigger');
 }
+const summaryText = JSON.stringify(summary);
+if (!summaryText.includes("AT TIME ZONE 'Asia/Seoul'") || !summaryText.includes("timeZone:'Asia/Seoul'")) {
+  throw new Error('summary: Asia/Seoul calendar-day contract missing');
+}
 for (const node of summary.nodes.filter((node) => node.type === 'n8n-nodes-base.httpRequest')) {
   if (!String(node.parameters.url ?? '').startsWith('http://mock-api:3000/')) throw new Error(`summary: unexpected mock URL in ${node.name}`);
 }
