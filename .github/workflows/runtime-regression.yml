@@ -170,7 +170,7 @@ jobs:
           grep -F 'e0f539bd-1abc-405c-a4f8-7e8861ac83bc|E-commerce Ops - Global Error Handler' /tmp/n8n-workflows.txt
           grep -F '83131f1e-3aba-4e04-a3b6-bc1946c30661|E-commerce Daily Summary' /tmp/n8n-workflows.txt
 
-      - name: Publish workflows and restart n8n
+      - name: Publish workflows and wait for activation
         shell: bash
         run: |
           set -euo pipefail
@@ -180,11 +180,21 @@ jobs:
           docker compose restart n8n
           ready=0
           for _ in $(seq 1 60); do
-            if curl -fsS http://localhost:5678/healthz/readiness >/dev/null 2>&1; then ready=1; break; fi
+            logs="$(docker compose logs --no-color n8n 2>&1 || true)"
+            if curl -fsS http://localhost:5678/healthz/readiness >/dev/null 2>&1 \
+              && grep -Fq 'Activated workflow "E-commerce Order Intake - Reliability Demo"' <<<"$logs" \
+              && grep -Fq 'Activated workflow "E-commerce Daily Summary"' <<<"$logs" \
+              && grep -Fq 'Activated workflow "E-commerce Ops - Global Error Handler"' <<<"$logs"; then
+              ready=1
+              break
+            fi
             sleep 2
           done
-          test "$ready" -eq 1
-          echo 'Workflow publish/restart: PASS'
+          if [ "$ready" -ne 1 ]; then
+            docker compose logs --no-color n8n
+            exit 1
+          fi
+          echo 'Workflow publish/restart/activation: PASS'
 
       - name: Run live webhook regression
         shell: bash
