@@ -23,7 +23,7 @@ jobs:
           echo "c3c93fb392c28aa86cb0915f1d27f39686fcfc9e4c1adb81c13d0cff8b7d439e  /tmp/repo.tar.gz" | sha256sum -c -
           tar -xzf /tmp/repo.tar.gz -C "$GITHUB_WORKSPACE"
           rm -rf .bootstrap
-          rm -f .github/workflows/bootstrap-upload.yml
+          rm -f .github/workflows/ci.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
