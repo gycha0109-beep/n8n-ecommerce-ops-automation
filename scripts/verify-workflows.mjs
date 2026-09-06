@@ -63,6 +63,7 @@ for (const node of errorWorkflow.nodes.filter((node) => node.type === 'n8n-nodes
 }
 const summary = loaded[2][1];
 if (!summary.nodes.some((node) => node.type === 'n8n-nodes-base.scheduleTrigger')) throw new Error('summary: no schedule trigger');
+// Keep a sub-workflow trigger so n8n CLI regression can execute the same DB-derived summary path as the schedule trigger.
 const executeTrigger = summary.nodes.find((node) => node.type === 'n8n-nodes-base.executeWorkflowTrigger');
 if (!executeTrigger || executeTrigger.typeVersion !== 1.1 || executeTrigger.parameters?.inputSource !== 'passthrough') {
   throw new Error('summary: no CLI-compatible execute workflow trigger');
