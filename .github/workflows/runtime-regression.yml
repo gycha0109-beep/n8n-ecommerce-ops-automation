@@ -1,0 +1,150 @@
+name: p13-runtime-regression
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/runtime-regression.yml'
+      - 'docker-compose.yml'
+      - 'db/**'
+      - 'workflows/**'
+      - 'mock-api/**'
+      - 'scripts/import-workflows.sh'
+      - 'scripts/verify-workflows.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-infrastructure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate ephemeral runtime secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          {
+            echo 'POSTGRES_DB=ecommerce_ops'
+            echo 'POSTGRES_USER=ecommerce_ops'
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
+            echo "N8N_ENCRYPTION_KEY=$(openssl rand -hex 32)"
+            echo 'N8N_HOST=localhost'
+            echo 'N8N_PROTOCOL=http'
+            echo 'WEBHOOK_URL=http://localhost:5678/'
+            echo 'GENERIC_TIMEZONE=Asia/Seoul'
+            echo 'TZ=Asia/Seoul'
+          } > .env
+
+      - name: Validate repository contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-workflows.mjs
+          docker compose config >/dev/null
+
+      - name: Start PostgreSQL 17, mock API, and n8n
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose up -d --build
+          docker compose ps
+
+      - name: Wait for runtime readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=0
+          for _ in $(seq 1 90); do
+            if curl -fsS http://localhost:3000/health >/dev/null \
+              && curl -fsS http://localhost:5678/healthz/readiness >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            docker compose ps
+            docker compose logs --no-color
+            exit 1
+          fi
+          curl -fsS http://localhost:3000/health
+          curl -fsS http://localhost:5678/healthz
+          curl -fsS http://localhost:5678/healthz/readiness
+
+      - name: Verify pinned runtime versions and database initialization
+        shell: bash
+        run: |
+          set -euo pipefail
+          pg_version="$(docker compose exec -T postgres postgres --version)"
+          n8n_version="$(docker compose exec -T n8n n8n --version | tail -n 1 | tr -d '\r')"
+          echo "$pg_version"
+          echo "n8n $n8n_version"
+          [[ "$pg_version" == *'17.11'* ]]
+          [[ "$n8n_version" == '2.37.10' ]]
+
+          server_version="$(docker compose exec -T postgres psql -U ecommerce_ops -d ecommerce_ops -Atc 'SHOW server_version;' | tr -d '\r')"
+          echo "PostgreSQL server_version=$server_version"
+          [[ "$server_version" == 17.11* ]]
+
+          docker compose exec -T postgres psql -U ecommerce_ops -d ecommerce_ops -v ON_ERROR_STOP=1 -Atc \
+            "SELECT to_regclass('public.orders') IS NOT NULL AND to_regclass('public.exceptions') IS NOT NULL AND to_regclass('public.failed_jobs') IS NOT NULL;" \
+            | grep -qx 't'
+
+          n8n_table_count="$(docker compose exec -T postgres psql -U ecommerce_ops -d ecommerce_ops -Atc \
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema='n8n';" | tr -d '\r')"
+          echo "n8n schema table count=$n8n_table_count"
+          test "$n8n_table_count" -gt 0
+
+      - name: Import workflows and verify canonical identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/import-workflows.sh
+          docker compose exec -T n8n n8n list:workflow > /tmp/n8n-workflows.txt
+          cat /tmp/n8n-workflows.txt
+          grep -F '3e7b03e1-93af-4a51-8a16-819aff10b352' /tmp/n8n-workflows.txt
+          grep -F 'e0f539bd-1abc-405c-a4f8-7e8861ac83bc' /tmp/n8n-workflows.txt
+          grep -F '83131f1e-3aba-4e04-a3b6-bc1946c30661' /tmp/n8n-workflows.txt
+          grep -F 'E-commerce Order Intake - Reliability Demo' /tmp/n8n-workflows.txt
+          grep -F 'E-commerce Ops - Global Error Handler' /tmp/n8n-workflows.txt
+          grep -F 'E-commerce Daily Summary' /tmp/n8n-workflows.txt
+
+      - name: Check n8n startup log for PostgreSQL compatibility errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose logs --no-color n8n > /tmp/n8n.log
+          if grep -Eiq '(unsupported|not supported|incompatible).{0,80}postgres|postgres.{0,80}(unsupported|not supported|incompatible)' /tmp/n8n.log; then
+            cat /tmp/n8n.log
+            exit 1
+          fi
+          echo 'No PostgreSQL compatibility error found in n8n startup log.'
+
+      - name: Capture runtime diagnostics
+        if: always()
+        shell: bash
+        run: |
+          docker compose ps > runtime-compose-ps.txt 2>&1 || true
+          docker compose logs --no-color > runtime-compose.log 2>&1 || true
+          docker compose exec -T postgres psql -U ecommerce_ops -d ecommerce_ops -Atc 'SHOW server_version;' > runtime-postgres-version.txt 2>&1 || true
+          docker compose exec -T n8n n8n --version > runtime-n8n-version.txt 2>&1 || true
+
+      - name: Upload runtime diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p13-runtime-diagnostics
+          path: |
+            runtime-compose-ps.txt
+            runtime-compose.log
+            runtime-postgres-version.txt
+            runtime-n8n-version.txt
+
+      - name: Stop runtime
+        if: always()
+        shell: bash
+        run: docker compose down -v --remove-orphans
