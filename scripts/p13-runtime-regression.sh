@@ -111,7 +111,14 @@ Path('/tmp/p13-postgres-credential.json').write_text(json.dumps([{
 }]), encoding='utf-8')
 PY
 n8n_cid="$(docker compose ps -q n8n)"
-docker cp /tmp/p13-postgres-credential.json "$n8n_cid:/tmp/p13-postgres-credential.json"
+copy_for_n8n() {
+  local source_path="$1"
+  local container_path="$2"
+  docker cp "$source_path" "$n8n_cid:$container_path"
+  docker compose exec -T -u root n8n chown node:node "$container_path"
+  docker compose exec -T -u root n8n chmod 600 "$container_path"
+}
+copy_for_n8n /tmp/p13-postgres-credential.json /tmp/p13-postgres-credential.json
 docker compose exec -T n8n n8n import:credentials --input=/tmp/p13-postgres-credential.json
 rm -f /tmp/p13-postgres-credential.json
 docker compose exec -T -u root n8n rm -f /tmp/p13-postgres-credential.json
@@ -134,7 +141,7 @@ PY
 
 for file in /tmp/p13-workflows/*.json; do
   base="$(basename "$file")"
-  docker cp "$file" "$n8n_cid:/tmp/$base"
+  copy_for_n8n "$file" "/tmp/$base"
   docker compose exec -T n8n n8n import:workflow --input="/tmp/$base"
   docker compose exec -T -u root n8n rm -f "/tmp/$base"
 done
