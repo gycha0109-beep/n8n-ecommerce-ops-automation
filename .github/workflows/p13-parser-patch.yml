@@ -1,0 +1,58 @@
+name: p13-parser-patch
+
+on:
+  push:
+    paths:
+      - '.github/workflows/p13-parser-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Patch n8n 2.37.10 raw-output parser
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          targets = [Path('.github/workflows/runtime-regression.yml'), Path('scripts/run-live-regression.sh')]
+          old = "if isinstance(value, dict) and 'data' in value and 'workflowData' in value:"
+          new = "if isinstance(value, dict) and value.get('mode') == 'cli' and isinstance(value.get('data'), dict) and 'resultData' in value['data']:"
+
+          changed = 0
+          for path in targets:
+              if not path.exists():
+                  continue
+              text = path.read_text(encoding='utf-8')
+              if old in text:
+                  text = text.replace(old, new)
+                  path.write_text(text, encoding='utf-8')
+                  changed += 1
+          if changed == 0:
+              raise SystemExit('raw-output parser anchor not found')
+          print(f'patched parser in {changed} file(s)')
+          PY
+
+          node scripts/verify-workflows.mjs
+          git diff --check
+          grep -n "resultData.*value\['data'\]" .github/workflows/runtime-regression.yml
+
+      - name: Commit patch and remove bootstrap workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/p13-parser-patch.yml
+          git add .github/workflows/runtime-regression.yml
+          if [ -f scripts/run-live-regression.sh ]; then git add scripts/run-live-regression.sh; fi
+          git commit -m 'test: parse n8n CLI raw output correctly'
+          git push origin HEAD:main
