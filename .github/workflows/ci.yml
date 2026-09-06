@@ -15,6 +15,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - name: Verify generated files are reproducible
+        run: |
+          python scripts/generate_workflows.py
+          python scripts/generate_fixtures.py
+          git diff --exit-code -- workflows fixtures
+      - name: Verify Compose configuration
+        env:
+          POSTGRES_PASSWORD: ci-placeholder-password
+          N8N_ENCRYPTION_KEY: ci-placeholder-encryption-key
+        run: docker compose config >/dev/null
       - name: Run synthetic smoke suite
         run: ./scripts/run-smoke.sh
       - name: Upload machine-readable report
