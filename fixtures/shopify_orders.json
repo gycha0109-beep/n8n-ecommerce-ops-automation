@@ -1,0 +1,242 @@
+[
+  {
+    "id": "SHOP-10001",
+    "email": "demo01@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-RED-001",
+        "quantity": 2,
+        "price": 10100
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "normal"
+  },
+  {
+    "id": "SHOP-10004",
+    "email": "demo04@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-BLK-004",
+        "quantity": 2,
+        "price": 10400
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "normal"
+  },
+  {
+    "id": "SHOP-10007",
+    "email": "demo07@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-BLU-002",
+        "quantity": 2,
+        "price": 10700
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "normal"
+  },
+  {
+    "id": "SHOP-10010",
+    "email": "demo10@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-WHT-005",
+        "quantity": 2,
+        "price": 11000
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "normal"
+  },
+  {
+    "id": "SHOP-10013",
+    "email": "demo13@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-GRN-003",
+        "quantity": 2,
+        "price": 11300
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "normal"
+  },
+  {
+    "id": "SHOP-10016",
+    "email": "demo16@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-RED-001",
+        "quantity": 2,
+        "price": 11600
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "normal"
+  },
+  {
+    "id": "SHOP-10019",
+    "email": "demo19@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-BLK-004",
+        "quantity": 2,
+        "price": 11900
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "normal"
+  },
+  {
+    "id": "SHOP-10022",
+    "email": "demo22@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-BLU-002",
+        "quantity": 2,
+        "price": 12200
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "normal"
+  },
+  {
+    "id": "SHOP-CANCEL-01",
+    "email": "cancel@example.com",
+    "financial_status": "cancelled",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-RED-001",
+        "quantity": 1,
+        "price": 12000
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "normal"
+  },
+  {
+    "id": "SHOP-MISSING-SKU",
+    "email": "missing-sku@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "",
+        "quantity": 1,
+        "price": 11000
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "normal"
+  },
+  {
+    "id": "SHOP-QTY-NEG",
+    "email": "neg@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-BLU-002",
+        "quantity": -2,
+        "price": 11000
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "normal"
+  },
+  {
+    "id": "",
+    "email": "missing-order@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-BLK-004",
+        "quantity": 1,
+        "price": 11000
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "normal"
+  },
+  {
+    "id": "SHOP-RETRY-RECOVER",
+    "email": "retry@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-BLU-002",
+        "quantity": 1,
+        "price": 15000
+      }
+    ],
+    "integration_mode": "fail_twice_then_success",
+    "notification_mode": "normal"
+  },
+  {
+    "id": "SHOP-NOTIFY-FAIL",
+    "email": "notify@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-WHT-005",
+        "quantity": 1,
+        "price": 15000
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "fail_notification"
+  },
+  {
+    "id": "SHOP-10001",
+    "email": "demo01@example.com",
+    "financial_status": "paid",
+    "created_at": "2026-09-01T09:00:00+09:00",
+    "currency": "KRW",
+    "line_items": [
+      {
+        "sku": "SKU-RED-001",
+        "quantity": 2,
+        "price": 10100
+      }
+    ],
+    "integration_mode": "normal",
+    "notification_mode": "normal"
+  }
+]

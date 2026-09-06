@@ -1,0 +1,125 @@
+{
+    "name":  "E-commerce Ops ??Global Error Handler",
+    "nodes":  [
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "a088edcb-4af4-51a0-af8a-bb1cf45eefd2",
+                      "name":  "Error Trigger",
+                      "type":  "n8n-nodes-base.errorTrigger",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -540,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const e=$json; const order_key=e.execution?.data?.resultData?.lastNodeExecuted ?? \u0027workflow\u0027; const payload={source:\u0027n8n\u0027,external_order_id:String(e.execution?.id??\u0027unknown\u0027),order_key:`n8n:${e.execution?.id??\u0027unknown\u0027}`,raw_payload:e}; payload.payload_b64=Buffer.from(JSON.stringify(payload),\u0027utf8\u0027).toString(\u0027base64\u0027); return [{json:payload}];"
+                                     },
+                      "id":  "1839bb07-363d-5a58-9af8-da6058012ffc",
+                      "name":  "Build Failure Envelope",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       -300,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT record_failed_job_b64($1, \u0027WORKFLOW_EXECUTION_FAILURE\u0027, \u0027Unhandled n8n workflow execution failure\u0027, 1);",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.payload_b64 }}"
+                                                     }
+                                     },
+                      "id":  "e1dd59df-d9d6-5bda-86b3-33789866c8cf",
+                      "name":  "Store Unexpected Failure",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       -40,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "http://mock-api:3000/api/notify",
+                                         "sendBody":  true,
+                                         "contentType":  "raw",
+                                         "rawContentType":  "application/json",
+                                         "body":  "={{ JSON.stringify({event:\"workflow_error\",order_key:$json.order_key}) }}",
+                                         "options":  {
+                                                         "response":  {
+                                                                          "response":  {
+                                                                                           "fullResponse":  true,
+                                                                                           "neverError":  true
+                                                                                       }
+                                                                      },
+                                                         "timeout":  2000
+                                                     }
+                                     },
+                      "id":  "c9eed628-9ad7-50b8-b9f2-e8050db99209",
+                      "name":  "Alert Operator",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.3,
+                      "position":  [
+                                       220,
+                                       0
+                                   ]
+                  }
+              ],
+    "pinData":  {
+
+                },
+    "connections":  {
+                        "Error Trigger":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Build Failure Envelope",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Build Failure Envelope":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "Store Unexpected Failure",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "Store Unexpected Failure":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "Alert Operator",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     }
+                    },
+    "active":  false,
+    "settings":  {
+                     "executionOrder":  "v1"
+                 },
+    "versionId":  "6f764073-d923-5f45-8024-8ec6522d9283",
+    "meta":  {
+                 "templateCredsSetupCompleted":  false
+             },
+    "tags":  [
+
+             ],
+    "id":  "e0f539bd-1abc-405c-a4f8-7e8861ac83bc"
+}

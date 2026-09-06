@@ -1,0 +1,23 @@
+{
+  "orders_processed": 26,
+  "successful": 26,
+  "cancelled": 3,
+  "exceptions": 17,
+  "duplicates_ignored": 2,
+  "retry_recovered": 1,
+  "permanent_failures": 2,
+  "failed_jobs": 2,
+  "exception_codes": {
+    "API_TEMPORARY_FAILURE": 2,
+    "DUPLICATE_ORDER": 2,
+    "INSUFFICIENT_STOCK": 1,
+    "INVALID_CURRENCY": 1,
+    "INVALID_QUANTITY": 2,
+    "MALFORMED_EMAIL": 1,
+    "MALFORMED_INPUT": 1,
+    "MISSING_FIELD": 2,
+    "NOTIFICATION_FAILURE": 1,
+    "ORDER_CANCELLED": 3,
+    "UNKNOWN_SKU": 1
+  }
+}

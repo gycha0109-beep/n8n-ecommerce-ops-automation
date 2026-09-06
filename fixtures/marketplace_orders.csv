@@ -1,0 +1,14 @@
+﻿order_no,email,product_sku,qty,price,currency,status,created,integration_mode,notification_mode
+MARK-10003,demo03@example.com,SKU-GRN-003,1,10300,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
+MARK-10006,demo06@example.com,SKU-RED-001,1,10600,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
+MARK-10009,demo09@example.com,SKU-BLK-004,1,10900,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
+MARK-10012,demo12@example.com,SKU-BLU-002,1,11200,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
+MARK-10015,demo15@example.com,SKU-WHT-005,1,11500,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
+MARK-10018,demo18@example.com,SKU-GRN-003,1,11800,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
+MARK-10021,demo21@example.com,SKU-RED-001,1,12100,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
+MARK-10024,demo24@example.com,SKU-BLK-004,1,12400,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
+MKT-CANCEL-01,cancel3@example.com,SKU-GRN-003,1,14000,KRW,cancelled,2026-09-01T09:00:00+09:00,normal,normal
+MKT-QTY-ZERO,zero@example.com,SKU-RED-001,0,11000,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
+MKT-BAD-EMAIL,not-an-email,SKU-GRN-003,1,11000,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
+MKT-MALFORMED-QTY,csv@example.com,SKU-RED-001,not-a-number,11000,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
+MKT-TIMEOUT,timeout@example.com,SKU-BLK-004,1,15000,KRW,paid,2026-09-01T09:00:00+09:00,timeout,normal
