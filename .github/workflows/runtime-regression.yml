@@ -138,7 +138,7 @@ jobs:
           docker cp /tmp/p13-postgres-credential.json "$n8n_cid:/tmp/p13-postgres-credential.json"
           docker compose exec -T n8n n8n import:credentials --input=/tmp/p13-postgres-credential.json
           rm -f /tmp/p13-postgres-credential.json
-          docker compose exec -T n8n rm -f /tmp/p13-postgres-credential.json
+          docker compose exec -T -u root n8n rm -f /tmp/p13-postgres-credential.json
           echo 'Postgres credential import: PASS'
 
       - name: Bind credential and import workflows
@@ -163,7 +163,7 @@ jobs:
             base="$(basename "$file")"
             docker cp "$file" "$n8n_cid:/tmp/$base"
             docker compose exec -T n8n n8n import:workflow --input="/tmp/$base"
-            docker compose exec -T n8n rm -f "/tmp/$base"
+            docker compose exec -T -u root n8n rm -f "/tmp/$base"
           done
           docker compose exec -T n8n n8n list:workflow > /tmp/n8n-workflows.txt
           grep -F '3e7b03e1-93af-4a51-8a16-819aff10b352|E-commerce Order Intake - Reliability Demo' /tmp/n8n-workflows.txt
