@@ -1,0 +1,6 @@
+.env
+node_modules/
+.n8n/
+generated/*.db
+generated/*.log
+generated/*.pid
