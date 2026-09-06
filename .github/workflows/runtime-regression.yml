@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Generate ephemeral runtime secrets
         shell: bash
@@ -266,7 +266,7 @@ jobs:
 
           docker compose stop n8n
           set +e
-          docker compose run --rm -T n8n n8n execute --id=83131f1e-3aba-4e04-a3b6-bc1946c30661 --rawOutput > /tmp/p13-daily-output.txt 2>&1
+          docker compose run --rm -T n8n execute --id=83131f1e-3aba-4e04-a3b6-bc1946c30661 --rawOutput > /tmp/p13-daily-output.txt 2>&1
           execute_code=$?
           set -e
           cat /tmp/p13-daily-output.txt
@@ -368,7 +368,7 @@ jobs:
 
       - name: Upload runtime evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: p13-runtime-evidence
           path: |
