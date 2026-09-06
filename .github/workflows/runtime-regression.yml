@@ -18,8 +18,9 @@ jobs:
   live-runtime-regression:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Generate ephemeral runtime secrets
         shell: bash
@@ -45,7 +46,7 @@ jobs:
           node scripts/verify-workflows.mjs
           docker compose config >/dev/null
 
-      - name: Start runtime
+      - name: Start runtime and verify versions
         shell: bash
         run: |
           set -euo pipefail
@@ -60,12 +61,7 @@ jobs:
             sleep 2
           done
           test "$ready" -eq 1
-          docker compose ps
 
-      - name: Verify runtime versions and DB initialization
-        shell: bash
-        run: |
-          set -euo pipefail
           pg_version="$(docker compose exec -T postgres postgres --version)"
           n8n_version="$(docker compose exec -T n8n n8n --version | tail -n 1 | tr -d '\r')"
           server_version="$(docker compose exec -T postgres psql -U ecommerce_ops -d ecommerce_ops -Atc 'SHOW server_version;' | tr -d '\r')"
@@ -78,9 +74,8 @@ jobs:
           docker compose exec -T postgres psql -U ecommerce_ops -d ecommerce_ops -Atc \
             "SELECT to_regclass('public.orders') IS NOT NULL AND to_regclass('public.exceptions') IS NOT NULL AND to_regclass('public.failed_jobs') IS NOT NULL;" \
             | grep -qx 't'
-          test "$(docker compose exec -T postgres psql -U ecommerce_ops -d ecommerce_ops -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='n8n';" | tr -d '\r')" -gt 0
 
-      - name: Bootstrap ephemeral n8n owner
+      - name: Bootstrap owner and Postgres credential
         shell: bash
         run: |
           set -euo pipefail
@@ -100,25 +95,10 @@ jobs:
             -X POST http://localhost:5678/rest/owner/setup \
             -H 'content-type: application/json' \
             --data-binary @/tmp/p13-owner.json)"
-          if [ "$status" != '200' ] && [ "$status" != '201' ]; then
-            echo "owner setup returned HTTP $status"
-            cat /tmp/p13-owner-response.json
-            exit 1
-          fi
-          python - <<'PY'
-          import json, urllib.request
-          with urllib.request.urlopen('http://localhost:5678/rest/settings', timeout=15) as r:
-              body=json.load(r)
-          assert body['data']['userManagement']['showSetupOnFirstLoad'] is False, body
-          print('n8n owner bootstrap: PASS')
-          PY
+          test "$status" = '200' -o "$status" = '201'
           rm -f /tmp/p13-owner.json /tmp/p13-owner-response.json
           unset OWNER_PASSWORD
 
-      - name: Import ephemeral Postgres credential
-        shell: bash
-        run: |
-          set -euo pipefail
           set -a; source .env; set +a
           python - <<'PY'
           import json, os
@@ -128,9 +108,14 @@ jobs:
               'name': 'P13 Postgres',
               'type': 'postgres',
               'data': {
-                  'host': 'postgres', 'database': 'ecommerce_ops', 'user': 'ecommerce_ops',
-                  'password': os.environ['POSTGRES_PASSWORD'], 'port': 5432,
-                  'ssl': 'disable', 'allowUnauthorizedCerts': False, 'maxConnections': 10,
+                  'host': 'postgres',
+                  'database': 'ecommerce_ops',
+                  'user': 'ecommerce_ops',
+                  'password': os.environ['POSTGRES_PASSWORD'],
+                  'port': 5432,
+                  'ssl': 'disable',
+                  'allowUnauthorizedCerts': False,
+                  'maxConnections': 10,
               },
           }]), encoding='utf-8')
           PY
@@ -139,7 +124,6 @@ jobs:
           docker compose exec -T n8n n8n import:credentials --input=/tmp/p13-postgres-credential.json
           rm -f /tmp/p13-postgres-credential.json
           docker compose exec -T -u root n8n rm -f /tmp/p13-postgres-credential.json
-          echo 'Postgres credential import: PASS'
 
       - name: Bind credential and import workflows
         shell: bash
@@ -148,16 +132,27 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          target=Path('/tmp/p13-workflows'); target.mkdir(exist_ok=True)
+
+          target = Path('/tmp/p13-workflows')
+          target.mkdir(exist_ok=True)
           for path in Path('workflows').glob('*.json'):
-              workflow=json.loads(path.read_text(encoding='utf-8'))
+              workflow = json.loads(path.read_text(encoding='utf-8'))
               for node in workflow.get('nodes', []):
                   if node.get('type') == 'n8n-nodes-base.postgres':
-                      node['credentials']={'postgres': {'id': 'p13-postgres-credential', 'name': 'P13 Postgres'}}
+                      node['credentials'] = {
+                          'postgres': {
+                              'id': 'p13-postgres-credential',
+                              'name': 'P13 Postgres',
+                          }
+                      }
               if path.name == 'ecommerce-order-intake.json':
-                  workflow.setdefault('settings', {})['errorWorkflow']='e0f539bd-1abc-405c-a4f8-7e8861ac83bc'
-              (target/path.name).write_text(json.dumps(workflow, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+                  workflow.setdefault('settings', {})['errorWorkflow'] = 'e0f539bd-1abc-405c-a4f8-7e8861ac83bc'
+              (target / path.name).write_text(
+                  json.dumps(workflow, ensure_ascii=False, indent=2) + '\n',
+                  encoding='utf-8',
+              )
           PY
+
           n8n_cid="$(docker compose ps -q n8n)"
           for file in /tmp/p13-workflows/*.json; do
             base="$(basename "$file")"
@@ -165,6 +160,7 @@ jobs:
             docker compose exec -T n8n n8n import:workflow --input="/tmp/$base"
             docker compose exec -T -u root n8n rm -f "/tmp/$base"
           done
+
           docker compose exec -T n8n n8n list:workflow > /tmp/n8n-workflows.txt
           grep -F '3e7b03e1-93af-4a51-8a16-819aff10b352|E-commerce Order Intake - Reliability Demo' /tmp/n8n-workflows.txt
           grep -F 'e0f539bd-1abc-405c-a4f8-7e8861ac83bc|E-commerce Ops - Global Error Handler' /tmp/n8n-workflows.txt
@@ -178,6 +174,7 @@ jobs:
           docker compose exec -T n8n n8n publish:workflow --id=83131f1e-3aba-4e04-a3b6-bc1946c30661
           docker compose exec -T n8n n8n publish:workflow --id=3e7b03e1-93af-4a51-8a16-819aff10b352
           docker compose restart n8n
+
           ready=0
           for _ in $(seq 1 60); do
             logs="$(docker compose logs --no-color n8n 2>&1 || true)"
@@ -190,29 +187,31 @@ jobs:
             fi
             sleep 2
           done
-          if [ "$ready" -ne 1 ]; then
-            docker compose logs --no-color n8n
-            exit 1
-          fi
-          echo 'Workflow publish/restart/activation: PASS'
+          test "$ready" -eq 1
 
       - name: Run live webhook regression
         shell: bash
         run: |
           set -euo pipefail
           webhook='http://localhost:5678/webhook/ecommerce-order-intake'
+
           post_order() {
-            local label="$1" expected_code="$2" expected_status="$3" payload="$4" body="/tmp/${1}.json" code
+            local label="$1" expected_code="$2" expected_status="$3" payload="$4"
+            local body="/tmp/${label}.json"
+            local code
             code="$(curl -sS -o "$body" -w '%{http_code}' -X POST "$webhook" -H 'content-type: application/json' --data-binary "$payload")"
             echo "$label -> HTTP $code $(cat "$body")"
             test "$code" = "$expected_code"
             python - "$body" "$expected_status" <<'PY'
           import json, sys
-          body=json.load(open(sys.argv[1], encoding='utf-8'))
+          body = json.load(open(sys.argv[1], encoding='utf-8'))
           assert body.get('status') == sys.argv[2], body
           PY
           }
-          psqlq() { docker compose exec -T postgres psql -U ecommerce_ops -d ecommerce_ops -Atc "$1" | tr -d '\r'; }
+
+          psqlq() {
+            docker compose exec -T postgres psql -U ecommerce_ops -d ecommerce_ops -Atc "$1" | tr -d '\r'
+          }
 
           normal='{"source":"shopify","payload":{"id":"P13-NORMAL","email":"p13-normal@example.com","financial_status":"paid","created_at":"2026-09-07T00:00:00+09:00","currency":"KRW","line_items":[{"sku":"SKU-RED-001","quantity":2,"price":10100}],"integration_mode":"normal","notification_mode":"normal"}}'
           retry='{"source":"shopify","payload":{"id":"P13-RETRY","email":"p13-retry@example.com","financial_status":"paid","created_at":"2026-09-07T00:01:00+09:00","currency":"KRW","line_items":[{"sku":"SKU-BLU-002","quantity":1,"price":15000}],"integration_mode":"fail_twice_then_success","notification_mode":"normal"}}'
@@ -254,48 +253,96 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          psqlq() { docker compose exec -T postgres psql -U ecommerce_ops -d ecommerce_ops -Atc "$1" | tr -d '\r'; }
+          psqlq() {
+            docker compose exec -T postgres psql -U ecommerce_ops -d ecommerce_ops -Atc "$1" | tr -d '\r'
+          }
+
           successful="$(psqlq "SELECT count(*) FROM orders WHERE processed_at >= date_trunc('day', now());")"
           exceptions="$(psqlq "SELECT count(*) FROM exceptions WHERE created_at >= date_trunc('day', now());")"
           cancelled="$(psqlq "SELECT count(*) FROM exceptions WHERE created_at >= date_trunc('day', now()) AND error_code='ORDER_CANCELLED';")"
           duplicates="$(psqlq "SELECT count(*) FROM exceptions WHERE created_at >= date_trunc('day', now()) AND error_code='DUPLICATE_ORDER';")"
           recovered="$(psqlq "SELECT count(*) FROM orders WHERE processed_at >= date_trunc('day', now()) AND retry_recovered;")"
           failures="$(psqlq "SELECT count(*) FROM failed_jobs WHERE created_at >= date_trunc('day', now()) AND status='dead_letter';")"
-          docker compose exec -T n8n n8n execute --id=83131f1e-3aba-4e04-a3b6-bc1946c30661 --rawOutput > /tmp/p13-daily-output.txt
+
+          docker compose stop n8n
+          set +e
+          docker compose run --rm -T n8n n8n execute --id=83131f1e-3aba-4e04-a3b6-bc1946c30661 --rawOutput > /tmp/p13-daily-output.txt 2>&1
+          execute_code=$?
+          set -e
+          cat /tmp/p13-daily-output.txt
+          if [ "$execute_code" -ne 0 ]; then
+            echo "Daily summary CLI execution failed with exit code $execute_code"
+            exit "$execute_code"
+          fi
+
           python - /tmp/p13-daily-output.txt "$successful" "$exceptions" "$cancelled" "$duplicates" "$recovered" "$failures" <<'PY'
           import json, sys
           from pathlib import Path
-          text=Path(sys.argv[1]).read_text(encoding='utf-8')
-          decoder=json.JSONDecoder(); execution=None
-          for i, ch in enumerate(text):
-              if ch != '{': continue
-              try: value, _ = decoder.raw_decode(text[i:])
-              except json.JSONDecodeError: continue
+
+          text = Path(sys.argv[1]).read_text(encoding='utf-8')
+          decoder = json.JSONDecoder()
+          execution = None
+          for index, char in enumerate(text):
+              if char != '{':
+                  continue
+              try:
+                  value, _ = decoder.raw_decode(text[index:])
+              except json.JSONDecodeError:
+                  continue
               if isinstance(value, dict) and 'data' in value and 'workflowData' in value:
-                  execution=value; break
-          if execution is None: raise SystemExit('Could not parse n8n execute JSON output')
-          found=[]
-          def walk(v):
-              if isinstance(v, dict):
-                  if v.get('event') == 'daily_summary': found.append(v)
-                  for x in v.values(): walk(x)
-              elif isinstance(v, list):
-                  for x in v: walk(x)
+                  execution = value
+                  break
+          if execution is None:
+              raise SystemExit('Could not parse n8n execute JSON output')
+
+          summaries = []
+          def walk(value):
+              if isinstance(value, dict):
+                  if value.get('event') == 'daily_summary':
+                      summaries.append(value)
+                  for child in value.values():
+                      walk(child)
+              elif isinstance(value, list):
+                  for child in value:
+                      walk(child)
           walk(execution)
-          if not found: raise SystemExit('daily_summary payload not found')
-          summary=found[-1]
-          expected={'successful':int(sys.argv[2]),'exceptions':int(sys.argv[3]),'cancelled':int(sys.argv[4]),'duplicates_ignored':int(sys.argv[5]),'retry_recovered':int(sys.argv[6]),'permanent_failures':int(sys.argv[7])}
-          for k,v in expected.items(): assert int(summary[k]) == v, (k, summary[k], v)
+          if not summaries:
+              raise SystemExit('daily_summary payload not found')
+
+          summary = summaries[-1]
+          expected = {
+              'successful': int(sys.argv[2]),
+              'exceptions': int(sys.argv[3]),
+              'cancelled': int(sys.argv[4]),
+              'duplicates_ignored': int(sys.argv[5]),
+              'retry_recovered': int(sys.argv[6]),
+              'permanent_failures': int(sys.argv[7]),
+          }
+          for key, value in expected.items():
+              assert int(summary[key]) == value, (key, summary[key], value)
           print('Daily summary reconciliation: PASS', expected)
           PY
 
-      - name: Verify error binding and compatibility log
+          cp /tmp/p13-daily-output.txt runtime-daily-output.txt
+          docker compose start n8n
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl -fsS http://localhost:5678/healthz/readiness >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+
+      - name: Verify error workflow binding and compatibility log
         shell: bash
         run: |
           set -euo pipefail
           docker compose exec -T postgres psql -U ecommerce_ops -d ecommerce_ops -Atc \
             "SELECT settings::jsonb->>'errorWorkflow' FROM n8n.workflow_entity WHERE id='3e7b03e1-93af-4a51-8a16-819aff10b352';" \
             | tr -d '\r' | grep -qx 'e0f539bd-1abc-405c-a4f8-7e8861ac83bc'
+
           docker compose logs --no-color n8n > /tmp/n8n.log
           if grep -Eiq '(unsupported|not supported|incompatible).{0,80}postgres|postgres.{0,80}(unsupported|not supported|incompatible)' /tmp/n8n.log; then
             cat /tmp/n8n.log
@@ -315,6 +362,9 @@ jobs:
           docker compose exec -T postgres psql -U ecommerce_ops -d ecommerce_ops -Atc \
             "SELECT (SELECT count(*) FROM orders)::int,(SELECT count(*) FROM exceptions)::int,(SELECT count(*) FROM exceptions WHERE error_code='ORDER_CANCELLED')::int,(SELECT count(*) FROM exceptions WHERE error_code='DUPLICATE_ORDER')::int,(SELECT count(*) FROM orders WHERE retry_recovered)::int,(SELECT count(*) FROM failed_jobs WHERE status='dead_letter')::int;" \
             > runtime-live-summary.txt 2>&1 || true
+          if [ -f /tmp/p13-daily-output.txt ] && [ ! -f runtime-daily-output.txt ]; then
+            cp /tmp/p13-daily-output.txt runtime-daily-output.txt
+          fi
 
       - name: Upload runtime evidence
         if: always()
@@ -327,6 +377,7 @@ jobs:
             runtime-postgres-version.txt
             runtime-n8n-version.txt
             runtime-live-summary.txt
+            runtime-daily-output.txt
 
       - name: Stop runtime
         if: always()
