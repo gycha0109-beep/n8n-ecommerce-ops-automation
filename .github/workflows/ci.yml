@@ -1,0 +1,26 @@
+name: portfolio-smoke
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  deterministic-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Run synthetic smoke suite
+        run: ./scripts/run-smoke.sh
+      - name: Upload machine-readable report
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report
+          path: |
+            generated/smoke-report.json
+            generated/summary.json
