@@ -74,17 +74,17 @@ for r in rows:
 (FIX / 'shopify_orders.json').write_text(json.dumps(shopify, indent=2), encoding='utf-8')
 
 def write_csv(path, data, fields):
-    with path.open('w', encoding='utf-8-sig', newline='') as f:
+    with path.open('w', encoding='utf-8', newline='') as f:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction='ignore', lineterminator='\n')
         w.writeheader(); w.writerows(data)
 
 write_csv(FIX / 'amazon_orders.csv', amazon, ['amazon_order_id','buyer_email','seller_sku','item_quantity','item_price','currency_code','order_status','purchase_date','integration_mode','notification_mode'])
 write_csv(FIX / 'marketplace_orders.csv', market, ['order_no','email','product_sku','qty','price','currency','status','created','integration_mode','notification_mode'])
 
-with (FIX / 'inventory.csv').open('w', encoding='utf-8-sig', newline='') as f:
+with (FIX / 'inventory.csv').open('w', encoding='utf-8', newline='') as f:
     w = csv.writer(f, lineterminator='\n'); w.writerow(['sku','available_quantity'])
     w.writerows([['SKU-RED-001',120],['SKU-BLU-002',100],['SKU-GRN-003',90],['SKU-BLK-004',80],['SKU-WHT-005',70],['SKU-LTD-006',2]])
-with (FIX / 'sku_master.csv').open('w', encoding='utf-8-sig', newline='') as f:
+with (FIX / 'sku_master.csv').open('w', encoding='utf-8', newline='') as f:
     w = csv.writer(f, lineterminator='\n'); w.writerow(['sku','product_name','active'])
     w.writerows([['SKU-RED-001','Red Widget',1],['SKU-BLU-002','Blue Widget',1],['SKU-GRN-003','Green Widget',1],['SKU-BLK-004','Black Widget',1],['SKU-WHT-005','White Widget',1],['SKU-LTD-006','Limited Widget',1]])
 

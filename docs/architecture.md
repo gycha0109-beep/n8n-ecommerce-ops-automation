@@ -45,4 +45,9 @@ flowchart TD
 
 ## Production mapping
 
-The local Docker topology uses PostgreSQL 16. The schema is intentionally Supabase-compatible because Supabase exposes PostgreSQL. In a real delivery, the n8n Postgres credential should point to the customer's Supabase/PostgreSQL instance rather than hard-coding connection data in the workflow JSON.
+The local Docker topology uses PostgreSQL 17.11. The schema is intentionally Supabase-compatible because Supabase exposes PostgreSQL. In a real delivery, the n8n Postgres credential should point to the customer's Supabase/PostgreSQL instance rather than hard-coding connection data in the workflow JSON.
+
+
+## PostgreSQL major-version reset strategy
+
+The P12 upgrade uses a new Compose volume key, `postgres17_data`, rather than mounting the previous PostgreSQL 16 data directory into PostgreSQL 17. This is deliberate for the synthetic portfolio environment: schema and seed data are recreated from repository SQL, while the old volume remains untouched until the upgraded demo is verified. A production/customer migration would require an explicit PostgreSQL-supported migration procedure such as dump/restore or `pg_upgrade`; this repository does not claim that a clean reset is a production migration strategy.

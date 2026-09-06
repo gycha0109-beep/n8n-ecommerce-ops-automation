@@ -1,133 +1,127 @@
 {
-    "name":  "E-commerce Ops ??Daily Summary",
-    "nodes":  [
-                  {
-                      "parameters":  {
-                                         "rule":  {
-                                                      "interval":  [
-                                                                       {
-                                                                           "field":  "cronExpression",
-                                                                           "expression":  "0 9 * * *"
-                                                                       }
-                                                                   ]
-                                                  }
-                                     },
-                      "id":  "ed56b6df-33e5-531c-8385-168ae79dfc44",
-                      "name":  "Daily 09:00",
-                      "type":  "n8n-nodes-base.scheduleTrigger",
-                      "typeVersion":  1.2,
-                      "position":  [
-                                       -560,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "SELECT (SELECT count(*) FROM orders WHERE processed_at \u003e= date_trunc(\u0027day\u0027, now()))::int AS successful, (SELECT count(*) FROM exceptions WHERE created_at \u003e= date_trunc(\u0027day\u0027, now()))::int AS exceptions, (SELECT count(*) FROM exceptions WHERE created_at \u003e= date_trunc(\u0027day\u0027, now()) AND error_code=\u0027ORDER_CANCELLED\u0027)::int AS cancelled, (SELECT count(*) FROM exceptions WHERE created_at \u003e= date_trunc(\u0027day\u0027, now()) AND error_code=\u0027DUPLICATE_ORDER\u0027)::int AS duplicates_ignored, (SELECT count(*) FROM orders WHERE processed_at \u003e= date_trunc(\u0027day\u0027, now()) AND retry_recovered)::int AS retry_recovered, (SELECT count(*) FROM failed_jobs WHERE created_at \u003e= date_trunc(\u0027day\u0027, now()) AND status=\u0027dead_letter\u0027)::int AS permanent_failures;",
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "b1cc84ca-0124-5ffb-9527-7b5b28517efd",
-                      "name":  "Query Daily Summary",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       -320,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "return [{json:{event:\u0027daily_summary\u0027,date:new Date().toISOString().slice(0,10),...$json}}];"
-                                     },
-                      "id":  "52d7f2ea-e447-5724-9213-8e8978301f4e",
-                      "name":  "Build Summary Message",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       -80,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "method":  "POST",
-                                         "url":  "http://mock-api:3000/api/notify",
-                                         "sendBody":  true,
-                                         "contentType":  "raw",
-                                         "rawContentType":  "application/json",
-                                         "body":  "={{ JSON.stringify($json) }}",
-                                         "options":  {
-                                                         "response":  {
-                                                                          "response":  {
-                                                                                           "fullResponse":  true,
-                                                                                           "neverError":  true
-                                                                                       }
-                                                                      },
-                                                         "timeout":  2000
-                                                     }
-                                     },
-                      "id":  "52cb4f4d-937c-5b0c-b62d-e8d76f271a6c",
-                      "name":  "Send Summary",
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "typeVersion":  4.3,
-                      "position":  [
-                                       180,
-                                       0
-                                   ]
-                  }
-              ],
-    "pinData":  {
-
-                },
-    "connections":  {
-                        "Daily 09:00":  {
-                                            "main":  [
-                                                         [
-                                                             {
-                                                                 "node":  "Query Daily Summary",
-                                                                 "type":  "main",
-                                                                 "index":  0
-                                                             }
-                                                         ]
-                                                     ]
-                                        },
-                        "Query Daily Summary":  {
-                                                    "main":  [
-                                                                 [
-                                                                     {
-                                                                         "node":  "Build Summary Message",
-                                                                         "type":  "main",
-                                                                         "index":  0
-                                                                     }
-                                                                 ]
-                                                             ]
-                                                },
-                        "Build Summary Message":  {
-                                                      "main":  [
-                                                                   [
-                                                                       {
-                                                                           "node":  "Send Summary",
-                                                                           "type":  "main",
-                                                                           "index":  0
-                                                                       }
-                                                                   ]
-                                                               ]
-                                                  }
-                    },
-    "active":  false,
-    "settings":  {
-                     "executionOrder":  "v1",
-                     "timezone":  "Asia/Seoul"
-                 },
-    "versionId":  "2ee6fa50-30fc-5a76-911a-622871000bd1",
-    "meta":  {
-                 "templateCredsSetupCompleted":  false
-             },
-    "tags":  [
-
-             ],
-    "id":  "83131f1e-3aba-4e04-a3b6-bc1946c30661"
+  "id": "83131f1e-3aba-4e04-a3b6-bc1946c30661",
+  "name": "E-commerce Daily Summary",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "ed56b6df-33e5-531c-8385-168ae79dfc44",
+      "name": "Daily 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT (SELECT count(*) FROM orders WHERE processed_at >= date_trunc('day', now()))::int AS successful, (SELECT count(*) FROM exceptions WHERE created_at >= date_trunc('day', now()))::int AS exceptions, (SELECT count(*) FROM exceptions WHERE created_at >= date_trunc('day', now()) AND error_code='ORDER_CANCELLED')::int AS cancelled, (SELECT count(*) FROM exceptions WHERE created_at >= date_trunc('day', now()) AND error_code='DUPLICATE_ORDER')::int AS duplicates_ignored, (SELECT count(*) FROM orders WHERE processed_at >= date_trunc('day', now()) AND retry_recovered)::int AS retry_recovered, (SELECT count(*) FROM failed_jobs WHERE created_at >= date_trunc('day', now()) AND status='dead_letter')::int AS permanent_failures;",
+        "options": {}
+      },
+      "id": "b1cc84ca-0124-5ffb-9527-7b5b28517efd",
+      "name": "Query Daily Summary",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{event:'daily_summary',date:new Date().toISOString().slice(0,10),...$json}}];"
+      },
+      "id": "52d7f2ea-e447-5724-9213-8e8978301f4e",
+      "name": "Build Summary Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mock-api:3000/api/notify",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 2000
+        }
+      },
+      "id": "52cb4f4d-937c-5b0c-b62d-e8d76f271a6c",
+      "name": "Send Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        180,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily 09:00": {
+      "main": [
+        [
+          {
+            "node": "Query Daily Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Daily Summary": {
+      "main": [
+        [
+          {
+            "node": "Build Summary Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Summary Message": {
+      "main": [
+        [
+          {
+            "node": "Send Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Seoul"
+  },
+  "versionId": "2ee6fa50-30fc-5a76-911a-622871000bd1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
 }

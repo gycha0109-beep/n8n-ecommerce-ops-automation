@@ -1,4 +1,4 @@
-﻿order_no,email,product_sku,qty,price,currency,status,created,integration_mode,notification_mode
+order_no,email,product_sku,qty,price,currency,status,created,integration_mode,notification_mode
 MARK-10003,demo03@example.com,SKU-GRN-003,1,10300,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
 MARK-10006,demo06@example.com,SKU-RED-001,1,10600,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
 MARK-10009,demo09@example.com,SKU-BLK-004,1,10900,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal

@@ -1,4 +1,4 @@
-﻿amazon_order_id,buyer_email,seller_sku,item_quantity,item_price,currency_code,order_status,purchase_date,integration_mode,notification_mode
+amazon_order_id,buyer_email,seller_sku,item_quantity,item_price,currency_code,order_status,purchase_date,integration_mode,notification_mode
 AMAZ-10002,demo02@example.com,SKU-BLU-002,3,10200,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
 AMAZ-10005,demo05@example.com,SKU-WHT-005,3,10500,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal
 AMAZ-10008,demo08@example.com,SKU-GRN-003,3,10800,KRW,paid,2026-09-01T09:00:00+09:00,normal,normal

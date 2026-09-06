@@ -1,1283 +1,1261 @@
 {
-    "name":  "E-commerce Order Intake ??Reliability Demo",
-    "nodes":  [
-                  {
-                      "parameters":  {
-                                         "httpMethod":  "POST",
-                                         "path":  "ecommerce-order-intake",
-                                         "responseMode":  "responseNode",
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "a6575cf7-645a-52ff-8290-05ec13b03e6d",
-                      "name":  "Order Intake Webhook",
-                      "type":  "n8n-nodes-base.webhook",
-                      "typeVersion":  2.1,
-                      "position":  [
-                                       -1320,
-                                       0
-                                   ],
-                      "webhookId":  "ed3c7b25-1134-54cd-8704-e6af34a8cb83"
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const input = $json.body ?? $json;\nconst source = String(input.source ?? \u0027\u0027).toLowerCase();\nconst p = input.payload ?? input;\nlet c = { source, raw_payload: p };\nif (source === \u0027shopify\u0027) {\n  const li = (p.line_items ?? [])[0] ?? {};\n  Object.assign(c, { external_order_id:p.id, customer_email:p.email, sku:li.sku, quantity:li.quantity, unit_price:li.price, currency:p.currency, order_status:p.financial_status, created_at:p.created_at, integration_mode:p.integration_mode ?? \u0027normal\u0027, notification_mode:p.notification_mode ?? \u0027normal\u0027 });\n} else if (source === \u0027amazon\u0027) {\n  Object.assign(c, { external_order_id:p.amazon_order_id, customer_email:p.buyer_email, sku:p.seller_sku, quantity:p.item_quantity, unit_price:p.item_price, currency:p.currency_code, order_status:p.order_status, created_at:p.purchase_date, integration_mode:p.integration_mode ?? \u0027normal\u0027, notification_mode:p.notification_mode ?? \u0027normal\u0027 });\n} else if (source === \u0027marketplace\u0027) {\n  Object.assign(c, { external_order_id:p.order_no, customer_email:p.email, sku:p.product_sku, quantity:p.qty, unit_price:p.price, currency:p.currency, order_status:p.status, created_at:p.created, integration_mode:p.integration_mode ?? \u0027normal\u0027, notification_mode:p.notification_mode ?? \u0027normal\u0027 });\n} else {\n  c = { ...c, ...p };\n}\nc.external_order_id = String(c.external_order_id ?? \u0027\u0027).trim();\nc.customer_email = String(c.customer_email ?? \u0027\u0027).trim().toLowerCase();\nc.sku = String(c.sku ?? \u0027\u0027).trim();\nc.currency = String(c.currency ?? \u0027\u0027).trim().toUpperCase();\nc.order_status = String(c.order_status ?? \u0027\u0027).trim().toLowerCase();\nc.order_key = `${c.source}:${c.external_order_id}`;\nc.quantity = Number(c.quantity);\nc.unit_price = Number(c.unit_price);\nc.payload_b64 = Buffer.from(JSON.stringify(c), \u0027utf8\u0027).toString(\u0027base64\u0027);\nreturn [{json:c}];"
-                                     },
-                      "id":  "ef79053a-c71d-5bcf-a063-c3186a10104d",
-                      "name":  "Normalize Incoming Order",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       -1100,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const p = $json;\nconst emailOk = /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(p.customer_email);\nlet error_code = null, error_message = null;\nif ([\u0027cancelled\u0027,\u0027canceled\u0027].includes(p.order_status)) { error_code=\u0027ORDER_CANCELLED\u0027; error_message=\u0027Cancelled orders are excluded from normal processing\u0027; }\nelse if (!p.external_order_id || !p.customer_email || !p.sku || !p.created_at) { error_code=\u0027MISSING_FIELD\u0027; error_message=\u0027Required order field is missing\u0027; }\nelse if (!emailOk) { error_code=\u0027MALFORMED_EMAIL\u0027; error_message=\u0027Customer email is malformed\u0027; }\nelse if (!Number.isFinite(p.quantity)) { error_code=\u0027MALFORMED_INPUT\u0027; error_message=\u0027Quantity is not numeric\u0027; }\nelse if (p.quantity \u003c= 0) { error_code=\u0027INVALID_QUANTITY\u0027; error_message=\u0027Quantity must be greater than zero\u0027; }\nelse if (!Number.isFinite(p.unit_price) || p.unit_price \u003c 0) { error_code=\u0027MALFORMED_INPUT\u0027; error_message=\u0027Unit price is invalid\u0027; }\nelse if (![\u0027KRW\u0027,\u0027USD\u0027,\u0027JPY\u0027,\u0027EUR\u0027].includes(p.currency)) { error_code=\u0027INVALID_CURRENCY\u0027; error_message=\u0027Unsupported currency\u0027; }\nreturn [{json:{...p, validation_status:error_code ? \u0027invalid\u0027 : \u0027valid\u0027, error_code, error_message}}];"
-                                     },
-                      "id":  "86c6301b-c667-5943-9a2c-4bdc6b3b1b31",
-                      "name":  "Validate Canonical Order",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       -880,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "options":  {
-                                                                            "caseSensitive":  true,
-                                                                            "leftValue":  "",
-                                                                            "typeValidation":  "strict",
-                                                                            "version":  2
-                                                                        },
-                                                            "conditions":  [
-                                                                               {
-                                                                                   "id":  "b6c59bcd-ac94-56e2-a5c1-b4b8f95c9ed9",
-                                                                                   "leftValue":  "={{ $json.validation_status }}",
-                                                                                   "rightValue":  "valid",
-                                                                                   "operator":  {
-                                                                                                    "type":  "string",
-                                                                                                    "operation":  "equals"
-                                                                                                }
-                                                                               }
-                                                                           ],
-                                                            "combinator":  "and"
-                                                        },
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "9b484d17-e5da-5a55-8839-f379a719cfd3",
-                      "name":  "Validation Passed?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2.2,
-                      "position":  [
-                                       -650,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "SELECT record_exception_b64($1, $2, $3);",
-                                         "options":  {
-                                                         "queryReplacement":  "={{ $json.payload_b64 }},={{ $json.error_code }},={{ $json.error_message }}"
-                                                     }
-                                     },
-                      "id":  "3518010f-3ad0-5477-8ce3-86c5f261e1fb",
-                      "name":  "Record Validation Exception",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       -400,
-                                       220
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "INSERT INTO processed_events(event_key, order_key) VALUES($1,$1) ON CONFLICT(event_key) DO UPDATE SET last_seen_at=now(), delivery_count=processed_events.delivery_count+1; SELECT EXISTS(SELECT 1 FROM orders WHERE order_key = $1) AS is_duplicate;",
-                                         "options":  {
-                                                         "queryReplacement":  "={{ $json.order_key }}"
-                                                     }
-                                     },
-                      "id":  "03a4f232-3b06-5690-8485-fec6f4b4df4c",
-                      "name":  "Check Idempotency",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       -400,
-                                       -80
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const p=$(\u0027Validate Canonical Order\u0027).first().json; return [{json:{...p,is_duplicate:Boolean($json.is_duplicate)}}];"
-                                     },
-                      "id":  "de3d1569-1ceb-5c6c-ae0b-f774e1118dcc",
-                      "name":  "Attach Duplicate Result",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       -180,
-                                       -80
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "options":  {
-                                                                            "caseSensitive":  true,
-                                                                            "leftValue":  "",
-                                                                            "typeValidation":  "strict",
-                                                                            "version":  2
-                                                                        },
-                                                            "conditions":  [
-                                                                               {
-                                                                                   "id":  "5b465bed-dba3-5e7f-964e-1d580cb3ad36",
-                                                                                   "leftValue":  "={{ $json.is_duplicate }}",
-                                                                                   "rightValue":  true,
-                                                                                   "operator":  {
-                                                                                                    "type":  "boolean",
-                                                                                                    "operation":  "true",
-                                                                                                    "singleValue":  true
-                                                                                                }
-                                                                               }
-                                                                           ],
-                                                            "combinator":  "and"
-                                                        },
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "d0ea61e5-c2fd-5031-a6c8-99403b02e108",
-                      "name":  "Duplicate?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2.2,
-                      "position":  [
-                                       40,
-                                       -80
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "SELECT record_exception_b64($1, \u0027DUPLICATE_ORDER\u0027, \u0027Order already processed; duplicate delivery ignored\u0027);",
-                                         "options":  {
-                                                         "queryReplacement":  "={{ $json.payload_b64 }}"
-                                                     }
-                                     },
-                      "id":  "577b789d-9ecb-53be-99e7-6900eeb79171",
-                      "name":  "Record Duplicate",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       260,
-                                       100
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "SELECT $1::text AS sku, $2::integer AS requested_quantity, EXISTS(SELECT 1 FROM sku_master WHERE sku=$1 AND active) AS sku_exists, COALESCE((SELECT available_quantity FROM inventory WHERE sku=$1),0) AS available_quantity;",
-                                         "options":  {
-                                                         "queryReplacement":  "={{ $json.sku }},={{ $json.quantity }}"
-                                                     }
-                                     },
-                      "id":  "73b5f09c-53f2-5613-96e2-16ab2f1158fd",
-                      "name":  "Load SKU Inventory",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       260,
-                                       -180
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const p=$(\u0027Validate Canonical Order\u0027).first().json; const exists=Boolean($json.sku_exists); const available=Number($json.available_quantity??0); let error_code=null,error_message=null; if(!exists){error_code=\u0027UNKNOWN_SKU\u0027;error_message=\u0027SKU does not exist in SKU master\u0027;} else if(available \u003c p.quantity){error_code=\u0027INSUFFICIENT_STOCK\u0027;error_message=\u0027Warehouse stock is lower than requested quantity\u0027;} return [{json:{...p,inventory_status:error_code?\u0027invalid\u0027:\u0027valid\u0027,available_quantity:available,error_code,error_message}}];"
-                                     },
-                      "id":  "f5b0edd3-e60f-5807-9f2c-f1601c355d27",
-                      "name":  "Classify Inventory",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       480,
-                                       -180
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "options":  {
-                                                                            "caseSensitive":  true,
-                                                                            "leftValue":  "",
-                                                                            "typeValidation":  "strict",
-                                                                            "version":  2
-                                                                        },
-                                                            "conditions":  [
-                                                                               {
-                                                                                   "id":  "cb960b93-edc9-5526-b836-02388109cc36",
-                                                                                   "leftValue":  "={{ $json.inventory_status }}",
-                                                                                   "rightValue":  "valid",
-                                                                                   "operator":  {
-                                                                                                    "type":  "string",
-                                                                                                    "operation":  "equals"
-                                                                                                }
-                                                                               }
-                                                                           ],
-                                                            "combinator":  "and"
-                                                        },
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "94cc5362-917d-5582-9561-7aa5e9d3cf95",
-                      "name":  "Inventory Valid?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2.2,
-                      "position":  [
-                                       700,
-                                       -180
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "SELECT record_exception_b64($1, $2, $3);",
-                                         "options":  {
-                                                         "queryReplacement":  "={{ $json.payload_b64 }},={{ $json.error_code }},={{ $json.error_message }}"
-                                                     }
-                                     },
-                      "id":  "2523b303-6428-5ecd-aea4-08e69508a4eb",
-                      "name":  "Record Inventory Exception",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       920,
-                                       40
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "method":  "POST",
-                                         "url":  "http://mock-api:3000/api/warehouse/reserve",
-                                         "sendBody":  true,
-                                         "contentType":  "raw",
-                                         "rawContentType":  "application/json",
-                                         "body":  "={{ JSON.stringify({order_key: $json.order_key, sku: $json.sku, quantity: $json.quantity, mode: $json.integration_mode}) }}",
-                                         "options":  {
-                                                         "response":  {
-                                                                          "response":  {
-                                                                                           "fullResponse":  true,
-                                                                                           "neverError":  true
-                                                                                       }
-                                                                      },
-                                                         "timeout":  1200
-                                                     }
-                                     },
-                      "id":  "85d318ef-e01a-5d9e-bf64-58a88a6751e4",
-                      "name":  "Warehouse Reserve Attempt 1",
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "typeVersion":  4.3,
-                      "position":  [
-                                       920,
-                                       -260
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const p=$(\u0027Classify Inventory\u0027).first().json; const status=Number($json.statusCode ?? 599); return [{json:{...p,http_status:status,attempt:1,api_ok:status\u003e=200\u0026\u0026status\u003c300,api_permanent:status\u003e=400\u0026\u0026status\u003c500}}];"
-                                     },
-                      "id":  "bb7b5b5e-b1e5-583c-8857-9d32d241cf68",
-                      "name":  "Evaluate Attempt 1",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       1140,
-                                       -260
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "options":  {
-                                                                            "caseSensitive":  true,
-                                                                            "leftValue":  "",
-                                                                            "typeValidation":  "strict",
-                                                                            "version":  2
-                                                                        },
-                                                            "conditions":  [
-                                                                               {
-                                                                                   "id":  "262fc717-4e5d-5983-861d-57dc8096cbdd",
-                                                                                   "leftValue":  "={{ $json.api_ok }}",
-                                                                                   "rightValue":  true,
-                                                                                   "operator":  {
-                                                                                                    "type":  "boolean",
-                                                                                                    "operation":  "true",
-                                                                                                    "singleValue":  true
-                                                                                                }
-                                                                               }
-                                                                           ],
-                                                            "combinator":  "and"
-                                                        },
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "57560b03-4724-5b4b-a6b2-5d34851764ee",
-                      "name":  "Attempt 1 Success?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2.2,
-                      "position":  [
-                                       1360,
-                                       -260
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "options":  {
-                                                                            "caseSensitive":  true,
-                                                                            "leftValue":  "",
-                                                                            "typeValidation":  "strict",
-                                                                            "version":  2
-                                                                        },
-                                                            "conditions":  [
-                                                                               {
-                                                                                   "id":  "34513739-394b-5b0c-94ea-ddef80b45d46",
-                                                                                   "leftValue":  "={{ $json.api_permanent }}",
-                                                                                   "rightValue":  true,
-                                                                                   "operator":  {
-                                                                                                    "type":  "boolean",
-                                                                                                    "operation":  "true",
-                                                                                                    "singleValue":  true
-                                                                                                }
-                                                                               }
-                                                                           ],
-                                                            "combinator":  "and"
-                                                        },
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "b7826140-3bb5-5b5d-b4c9-ebb7c7015027",
-                      "name":  "Attempt 1 Permanent?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2.2,
-                      "position":  [
-                                       1570,
-                                       -80
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "amount":  1,
-                                         "unit":  "seconds"
-                                     },
-                      "id":  "6277cb56-aef5-51a1-8ccd-3324e9bc3692",
-                      "name":  "Wait 1 Second",
-                      "type":  "n8n-nodes-base.wait",
-                      "typeVersion":  1.1,
-                      "position":  [
-                                       1790,
-                                       -140
-                                   ],
-                      "webhookId":  "cac6314d-0369-5942-8daa-fe0aadf6aa18"
-                  },
-                  {
-                      "parameters":  {
-                                         "method":  "POST",
-                                         "url":  "http://mock-api:3000/api/warehouse/reserve",
-                                         "sendBody":  true,
-                                         "contentType":  "raw",
-                                         "rawContentType":  "application/json",
-                                         "body":  "={{ JSON.stringify({order_key: $json.order_key, sku: $json.sku, quantity: $json.quantity, mode: $json.integration_mode}) }}",
-                                         "options":  {
-                                                         "response":  {
-                                                                          "response":  {
-                                                                                           "fullResponse":  true,
-                                                                                           "neverError":  true
-                                                                                       }
-                                                                      },
-                                                         "timeout":  1200
-                                                     }
-                                     },
-                      "id":  "3e0ab00d-9793-50c9-a060-5aa21db28e68",
-                      "name":  "Warehouse Reserve Attempt 2",
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "typeVersion":  4.3,
-                      "position":  [
-                                       2010,
-                                       -140
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const p=$(\u0027Classify Inventory\u0027).first().json; const status=Number($json.statusCode ?? 599); return [{json:{...p,http_status:status,attempt:2,api_ok:status\u003e=200\u0026\u0026status\u003c300,api_permanent:status\u003e=400\u0026\u0026status\u003c500}}];"
-                                     },
-                      "id":  "ec8d0f63-69b4-5e40-b43b-7c3411f12cd1",
-                      "name":  "Evaluate Attempt 2",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       2230,
-                                       -140
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "options":  {
-                                                                            "caseSensitive":  true,
-                                                                            "leftValue":  "",
-                                                                            "typeValidation":  "strict",
-                                                                            "version":  2
-                                                                        },
-                                                            "conditions":  [
-                                                                               {
-                                                                                   "id":  "67c1cf2d-6e72-590b-a67e-c5a06e2f2131",
-                                                                                   "leftValue":  "={{ $json.api_ok }}",
-                                                                                   "rightValue":  true,
-                                                                                   "operator":  {
-                                                                                                    "type":  "boolean",
-                                                                                                    "operation":  "true",
-                                                                                                    "singleValue":  true
-                                                                                                }
-                                                                               }
-                                                                           ],
-                                                            "combinator":  "and"
-                                                        },
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "9b1472c7-07c6-5ec5-8d4d-dee5079b39c0",
-                      "name":  "Attempt 2 Success?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2.2,
-                      "position":  [
-                                       2450,
-                                       -140
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "amount":  2,
-                                         "unit":  "seconds"
-                                     },
-                      "id":  "1b971543-d73c-5d46-a4fb-35bfee1c89fe",
-                      "name":  "Wait 2 Seconds",
-                      "type":  "n8n-nodes-base.wait",
-                      "typeVersion":  1.1,
-                      "position":  [
-                                       2670,
-                                       20
-                                   ],
-                      "webhookId":  "2def31b4-f685-5ec1-9c2d-7bce9cfed051"
-                  },
-                  {
-                      "parameters":  {
-                                         "method":  "POST",
-                                         "url":  "http://mock-api:3000/api/warehouse/reserve",
-                                         "sendBody":  true,
-                                         "contentType":  "raw",
-                                         "rawContentType":  "application/json",
-                                         "body":  "={{ JSON.stringify({order_key: $json.order_key, sku: $json.sku, quantity: $json.quantity, mode: $json.integration_mode}) }}",
-                                         "options":  {
-                                                         "response":  {
-                                                                          "response":  {
-                                                                                           "fullResponse":  true,
-                                                                                           "neverError":  true
-                                                                                       }
-                                                                      },
-                                                         "timeout":  1200
-                                                     }
-                                     },
-                      "id":  "a5f7e5a0-8522-50cf-89b4-6cf119b0e986",
-                      "name":  "Warehouse Reserve Attempt 3",
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "typeVersion":  4.3,
-                      "position":  [
-                                       2890,
-                                       20
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const p=$(\u0027Classify Inventory\u0027).first().json; const status=Number($json.statusCode ?? 599); return [{json:{...p,http_status:status,attempt:3,api_ok:status\u003e=200\u0026\u0026status\u003c300,api_permanent:status\u003e=400\u0026\u0026status\u003c500}}];"
-                                     },
-                      "id":  "43a541ce-c631-5182-9b65-bc461c3536e9",
-                      "name":  "Evaluate Attempt 3",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       3110,
-                                       20
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "options":  {
-                                                                            "caseSensitive":  true,
-                                                                            "leftValue":  "",
-                                                                            "typeValidation":  "strict",
-                                                                            "version":  2
-                                                                        },
-                                                            "conditions":  [
-                                                                               {
-                                                                                   "id":  "eddb9b16-fcb4-56bf-9da1-3639025a3209",
-                                                                                   "leftValue":  "={{ $json.api_ok }}",
-                                                                                   "rightValue":  true,
-                                                                                   "operator":  {
-                                                                                                    "type":  "boolean",
-                                                                                                    "operation":  "true",
-                                                                                                    "singleValue":  true
-                                                                                                }
-                                                                               }
-                                                                           ],
-                                                            "combinator":  "and"
-                                                        },
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "0a533ba6-f864-5196-ad19-244adc013164",
-                      "name":  "Attempt 3 Success?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2.2,
-                      "position":  [
-                                       3330,
-                                       20
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "amount":  4,
-                                         "unit":  "seconds"
-                                     },
-                      "id":  "e6598e75-cb2a-52da-a44e-02efee71a573",
-                      "name":  "Wait 4 Seconds",
-                      "type":  "n8n-nodes-base.wait",
-                      "typeVersion":  1.1,
-                      "position":  [
-                                       3550,
-                                       180
-                                   ],
-                      "webhookId":  "cb7c92c4-3bbf-5eca-9675-ebeab087c2bb"
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "SELECT record_failed_job_b64($1, \u0027API_TEMPORARY_FAILURE\u0027, \u0027Warehouse reservation failed after all retry attempts\u0027, $2::integer); SELECT record_exception_b64($1, \u0027API_TEMPORARY_FAILURE\u0027, \u0027Warehouse reservation did not recover\u0027);",
-                                         "options":  {
-                                                         "queryReplacement":  "={{ $json.payload_b64 }},={{ $json.attempt }}",
-                                                         "queryBatching":  "transaction"
-                                                     }
-                                     },
-                      "id":  "5070bca1-6897-5587-8cc3-60b4f2ad8479",
-                      "name":  "Dead Letter Failure",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       3770,
-                                       180
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "SELECT record_failed_job_b64($1, \u0027API_PERMANENT_FAILURE\u0027, \u0027Warehouse API returned a non-retryable 4xx response\u0027, 1); SELECT record_exception_b64($1, \u0027API_PERMANENT_FAILURE\u0027, \u0027Warehouse reservation rejected permanently\u0027);",
-                                         "options":  {
-                                                         "queryReplacement":  "={{ $json.payload_b64 }}",
-                                                         "queryBatching":  "transaction"
-                                                     }
-                                     },
-                      "id":  "0a5d1bae-e2bc-5d2f-a346-e5b126f9c8ce",
-                      "name":  "Permanent Failure",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       1790,
-                                       160
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const p=$(\u0027Classify Inventory\u0027).first().json; return [{json:{...p,retry_recovered:false}}];"
-                                     },
-                      "id":  "19ec0181-34f3-57c6-9e96-9ccea0c61f12",
-                      "name":  "Mark First Attempt Success",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       1570,
-                                       -420
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const p=$(\u0027Classify Inventory\u0027).first().json; return [{json:{...p,retry_recovered:true}}];"
-                                     },
-                      "id":  "2b02a97c-d3d8-5c8e-af98-f6539cfdd915",
-                      "name":  "Mark Retry Recovered 2",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       2670,
-                                       -260
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const p=$(\u0027Classify Inventory\u0027).first().json; return [{json:{...p,retry_recovered:true}}];"
-                                     },
-                      "id":  "0e82caaf-4ba4-548e-b107-95eb73a078e2",
-                      "name":  "Mark Retry Recovered 3",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       3550,
-                                       -60
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "SELECT reserve_inventory_and_insert_order_b64($1, $2::boolean) AS result, $2::boolean AS retry_recovered;",
-                                         "options":  {
-                                                         "queryReplacement":  "={{ $json.payload_b64 }},={{ $json.retry_recovered }}",
-                                                         "queryBatching":  "transaction"
-                                                     }
-                                     },
-                      "id":  "e3c69d3e-b081-535d-b37d-b6fb69f5d285",
-                      "name":  "Commit Order Transaction",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       3990,
-                                       -260
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const p=$(\u0027Classify Inventory\u0027).first().json; return [{json:{...p,db_result:$json.result,retry_recovered:Boolean($json.retry_recovered)}}];"
-                                     },
-                      "id":  "11b58a5d-ecdd-5bc0-ab06-67c1d26e4ca4",
-                      "name":  "Attach Commit Result",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       4210,
-                                       -260
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "method":  "POST",
-                                         "url":  "http://mock-api:3000/api/notify",
-                                         "sendBody":  true,
-                                         "contentType":  "raw",
-                                         "rawContentType":  "application/json",
-                                         "body":  "={{ JSON.stringify({event:\"order_processed\",order_key:$json.order_key,mode:$json.notification_mode}) }}",
-                                         "options":  {
-                                                         "response":  {
-                                                                          "response":  {
-                                                                                           "fullResponse":  true,
-                                                                                           "neverError":  true
-                                                                                       }
-                                                                      },
-                                                         "timeout":  2000
-                                                     }
-                                     },
-                      "id":  "50cf282e-51c3-59e3-83d0-d9787233a861",
-                      "name":  "Notify Processed",
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "typeVersion":  4.3,
-                      "position":  [
-                                       4430,
-                                       -260
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "options":  {
-                                                                            "caseSensitive":  true,
-                                                                            "leftValue":  "",
-                                                                            "typeValidation":  "strict",
-                                                                            "version":  2
-                                                                        },
-                                                            "conditions":  [
-                                                                               {
-                                                                                   "id":  "b8c6ec47-4f7a-548f-9364-7f61bbc0c90c",
-                                                                                   "leftValue":  "={{ $json.statusCode \u003e= 200 \u0026\u0026 $json.statusCode \u003c 300 }}",
-                                                                                   "rightValue":  true,
-                                                                                   "operator":  {
-                                                                                                    "type":  "boolean",
-                                                                                                    "operation":  "true",
-                                                                                                    "singleValue":  true
-                                                                                                }
-                                                                               }
-                                                                           ],
-                                                            "combinator":  "and"
-                                                        },
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "6b2ef279-0cb3-599e-b339-edfdfc1e12c1",
-                      "name":  "Notification OK?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2.2,
-                      "position":  [
-                                       4650,
-                                       -260
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "SELECT record_exception_b64($1, \u0027NOTIFICATION_FAILURE\u0027, \u0027Order was stored but downstream notification failed\u0027);",
-                                         "options":  {
-                                                         "queryReplacement":  "={{ $(\u0027Classify Inventory\u0027).first().json.payload_b64 }}"
-                                                     }
-                                     },
-                      "id":  "6c53f544-8ea1-5745-abe9-4010b046e53e",
-                      "name":  "Record Notification Failure",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       4870,
-                                       -80
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "respondWith":  "json",
-                                         "responseBody":  "={{ {ok:true,order_key:$(\"Classify Inventory\").first().json.order_key,status:\"processed\"} }}",
-                                         "options":  {
-                                                         "responseCode":  200
-                                                     }
-                                     },
-                      "id":  "2d77eefc-1feb-592e-880b-1134c9a82d6e",
-                      "name":  "Respond Success",
-                      "type":  "n8n-nodes-base.respondToWebhook",
-                      "typeVersion":  1.4,
-                      "position":  [
-                                       4870,
-                                       -360
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "respondWith":  "json",
-                                         "responseBody":  "={{ {ok:false,order_key:$(\"Validate Canonical Order\").first().json.order_key,status:\"exception\"} }}",
-                                         "options":  {
-                                                         "responseCode":  202
-                                                     }
-                                     },
-                      "id":  "e81d8245-109a-54ec-9b19-a0a7b45ffc0f",
-                      "name":  "Respond Exception",
-                      "type":  "n8n-nodes-base.respondToWebhook",
-                      "typeVersion":  1.4,
-                      "position":  [
-                                       620,
-                                       300
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "respondWith":  "json",
-                                         "responseBody":  "={{ {ok:false,order_key:$(\"Classify Inventory\").first().json.order_key,status:\"dead_letter\"} }}",
-                                         "options":  {
-                                                         "responseCode":  202
-                                                     }
-                                     },
-                      "id":  "93211f9c-6182-56d6-979b-4153552c0753",
-                      "name":  "Respond Failure",
-                      "type":  "n8n-nodes-base.respondToWebhook",
-                      "typeVersion":  1.4,
-                      "position":  [
-                                       3990,
-                                       180
-                                   ]
-                  }
-              ],
-    "pinData":  {
-
-                },
-    "connections":  {
-                        "Order Intake Webhook":  {
-                                                     "main":  [
-                                                                  [
-                                                                      {
-                                                                          "node":  "Normalize Incoming Order",
-                                                                          "type":  "main",
-                                                                          "index":  0
-                                                                      }
-                                                                  ]
-                                                              ]
-                                                 },
-                        "Normalize Incoming Order":  {
-                                                         "main":  [
-                                                                      [
-                                                                          {
-                                                                              "node":  "Validate Canonical Order",
-                                                                              "type":  "main",
-                                                                              "index":  0
-                                                                          }
-                                                                      ]
-                                                                  ]
-                                                     },
-                        "Validate Canonical Order":  {
-                                                         "main":  [
-                                                                      [
-                                                                          {
-                                                                              "node":  "Validation Passed?",
-                                                                              "type":  "main",
-                                                                              "index":  0
-                                                                          }
-                                                                      ]
-                                                                  ]
-                                                     },
-                        "Validation Passed?":  {
-                                                   "main":  [
-                                                                [
-                                                                    {
-                                                                        "node":  "Check Idempotency",
-                                                                        "type":  "main",
-                                                                        "index":  0
-                                                                    }
-                                                                ],
-                                                                [
-                                                                    {
-                                                                        "node":  "Record Validation Exception",
-                                                                        "type":  "main",
-                                                                        "index":  0
-                                                                    }
-                                                                ]
-                                                            ]
-                                               },
-                        "Record Validation Exception":  {
-                                                            "main":  [
-                                                                         [
-                                                                             {
-                                                                                 "node":  "Respond Exception",
-                                                                                 "type":  "main",
-                                                                                 "index":  0
-                                                                             }
-                                                                         ]
-                                                                     ]
-                                                        },
-                        "Check Idempotency":  {
-                                                  "main":  [
-                                                               [
-                                                                   {
-                                                                       "node":  "Attach Duplicate Result",
-                                                                       "type":  "main",
-                                                                       "index":  0
-                                                                   }
-                                                               ]
-                                                           ]
-                                              },
-                        "Attach Duplicate Result":  {
-                                                        "main":  [
-                                                                     [
-                                                                         {
-                                                                             "node":  "Duplicate?",
-                                                                             "type":  "main",
-                                                                             "index":  0
-                                                                         }
-                                                                     ]
-                                                                 ]
-                                                    },
-                        "Duplicate?":  {
-                                           "main":  [
-                                                        [
-                                                            {
-                                                                "node":  "Record Duplicate",
-                                                                "type":  "main",
-                                                                "index":  0
-                                                            }
-                                                        ],
-                                                        [
-                                                            {
-                                                                "node":  "Load SKU Inventory",
-                                                                "type":  "main",
-                                                                "index":  0
-                                                            }
-                                                        ]
-                                                    ]
-                                       },
-                        "Record Duplicate":  {
-                                                 "main":  [
-                                                              [
-                                                                  {
-                                                                      "node":  "Respond Exception",
-                                                                      "type":  "main",
-                                                                      "index":  0
-                                                                  }
-                                                              ]
-                                                          ]
-                                             },
-                        "Load SKU Inventory":  {
-                                                   "main":  [
-                                                                [
-                                                                    {
-                                                                        "node":  "Classify Inventory",
-                                                                        "type":  "main",
-                                                                        "index":  0
-                                                                    }
-                                                                ]
-                                                            ]
-                                               },
-                        "Classify Inventory":  {
-                                                   "main":  [
-                                                                [
-                                                                    {
-                                                                        "node":  "Inventory Valid?",
-                                                                        "type":  "main",
-                                                                        "index":  0
-                                                                    }
-                                                                ]
-                                                            ]
-                                               },
-                        "Inventory Valid?":  {
-                                                 "main":  [
-                                                              [
-                                                                  {
-                                                                      "node":  "Warehouse Reserve Attempt 1",
-                                                                      "type":  "main",
-                                                                      "index":  0
-                                                                  }
-                                                              ],
-                                                              [
-                                                                  {
-                                                                      "node":  "Record Inventory Exception",
-                                                                      "type":  "main",
-                                                                      "index":  0
-                                                                  }
-                                                              ]
-                                                          ]
-                                             },
-                        "Record Inventory Exception":  {
-                                                           "main":  [
-                                                                        [
-                                                                            {
-                                                                                "node":  "Respond Exception",
-                                                                                "type":  "main",
-                                                                                "index":  0
-                                                                            }
-                                                                        ]
-                                                                    ]
-                                                       },
-                        "Warehouse Reserve Attempt 1":  {
-                                                            "main":  [
-                                                                         [
-                                                                             {
-                                                                                 "node":  "Evaluate Attempt 1",
-                                                                                 "type":  "main",
-                                                                                 "index":  0
-                                                                             }
-                                                                         ]
-                                                                     ]
-                                                        },
-                        "Evaluate Attempt 1":  {
-                                                   "main":  [
-                                                                [
-                                                                    {
-                                                                        "node":  "Attempt 1 Success?",
-                                                                        "type":  "main",
-                                                                        "index":  0
-                                                                    }
-                                                                ]
-                                                            ]
-                                               },
-                        "Attempt 1 Success?":  {
-                                                   "main":  [
-                                                                [
-                                                                    {
-                                                                        "node":  "Mark First Attempt Success",
-                                                                        "type":  "main",
-                                                                        "index":  0
-                                                                    }
-                                                                ],
-                                                                [
-                                                                    {
-                                                                        "node":  "Attempt 1 Permanent?",
-                                                                        "type":  "main",
-                                                                        "index":  0
-                                                                    }
-                                                                ]
-                                                            ]
-                                               },
-                        "Attempt 1 Permanent?":  {
-                                                     "main":  [
-                                                                  [
-                                                                      {
-                                                                          "node":  "Permanent Failure",
-                                                                          "type":  "main",
-                                                                          "index":  0
-                                                                      }
-                                                                  ],
-                                                                  [
-                                                                      {
-                                                                          "node":  "Wait 1 Second",
-                                                                          "type":  "main",
-                                                                          "index":  0
-                                                                      }
-                                                                  ]
-                                                              ]
-                                                 },
-                        "Wait 1 Second":  {
-                                              "main":  [
-                                                           [
-                                                               {
-                                                                   "node":  "Warehouse Reserve Attempt 2",
-                                                                   "type":  "main",
-                                                                   "index":  0
-                                                               }
-                                                           ]
-                                                       ]
-                                          },
-                        "Warehouse Reserve Attempt 2":  {
-                                                            "main":  [
-                                                                         [
-                                                                             {
-                                                                                 "node":  "Evaluate Attempt 2",
-                                                                                 "type":  "main",
-                                                                                 "index":  0
-                                                                             }
-                                                                         ]
-                                                                     ]
-                                                        },
-                        "Evaluate Attempt 2":  {
-                                                   "main":  [
-                                                                [
-                                                                    {
-                                                                        "node":  "Attempt 2 Success?",
-                                                                        "type":  "main",
-                                                                        "index":  0
-                                                                    }
-                                                                ]
-                                                            ]
-                                               },
-                        "Attempt 2 Success?":  {
-                                                   "main":  [
-                                                                [
-                                                                    {
-                                                                        "node":  "Mark Retry Recovered 2",
-                                                                        "type":  "main",
-                                                                        "index":  0
-                                                                    }
-                                                                ],
-                                                                [
-                                                                    {
-                                                                        "node":  "Wait 2 Seconds",
-                                                                        "type":  "main",
-                                                                        "index":  0
-                                                                    }
-                                                                ]
-                                                            ]
-                                               },
-                        "Wait 2 Seconds":  {
-                                               "main":  [
-                                                            [
-                                                                {
-                                                                    "node":  "Warehouse Reserve Attempt 3",
-                                                                    "type":  "main",
-                                                                    "index":  0
-                                                                }
-                                                            ]
-                                                        ]
-                                           },
-                        "Warehouse Reserve Attempt 3":  {
-                                                            "main":  [
-                                                                         [
-                                                                             {
-                                                                                 "node":  "Evaluate Attempt 3",
-                                                                                 "type":  "main",
-                                                                                 "index":  0
-                                                                             }
-                                                                         ]
-                                                                     ]
-                                                        },
-                        "Evaluate Attempt 3":  {
-                                                   "main":  [
-                                                                [
-                                                                    {
-                                                                        "node":  "Attempt 3 Success?",
-                                                                        "type":  "main",
-                                                                        "index":  0
-                                                                    }
-                                                                ]
-                                                            ]
-                                               },
-                        "Attempt 3 Success?":  {
-                                                   "main":  [
-                                                                [
-                                                                    {
-                                                                        "node":  "Mark Retry Recovered 3",
-                                                                        "type":  "main",
-                                                                        "index":  0
-                                                                    }
-                                                                ],
-                                                                [
-                                                                    {
-                                                                        "node":  "Wait 4 Seconds",
-                                                                        "type":  "main",
-                                                                        "index":  0
-                                                                    }
-                                                                ]
-                                                            ]
-                                               },
-                        "Wait 4 Seconds":  {
-                                               "main":  [
-                                                            [
-                                                                {
-                                                                    "node":  "Dead Letter Failure",
-                                                                    "type":  "main",
-                                                                    "index":  0
-                                                                }
-                                                            ]
-                                                        ]
-                                           },
-                        "Permanent Failure":  {
-                                                  "main":  [
-                                                               [
-                                                                   {
-                                                                       "node":  "Respond Failure",
-                                                                       "type":  "main",
-                                                                       "index":  0
-                                                                   }
-                                                               ]
-                                                           ]
-                                              },
-                        "Dead Letter Failure":  {
-                                                    "main":  [
-                                                                 [
-                                                                     {
-                                                                         "node":  "Respond Failure",
-                                                                         "type":  "main",
-                                                                         "index":  0
-                                                                     }
-                                                                 ]
-                                                             ]
-                                                },
-                        "Mark First Attempt Success":  {
-                                                           "main":  [
-                                                                        [
-                                                                            {
-                                                                                "node":  "Commit Order Transaction",
-                                                                                "type":  "main",
-                                                                                "index":  0
-                                                                            }
-                                                                        ]
-                                                                    ]
-                                                       },
-                        "Mark Retry Recovered 2":  {
-                                                       "main":  [
-                                                                    [
-                                                                        {
-                                                                            "node":  "Commit Order Transaction",
-                                                                            "type":  "main",
-                                                                            "index":  0
-                                                                        }
-                                                                    ]
-                                                                ]
-                                                   },
-                        "Mark Retry Recovered 3":  {
-                                                       "main":  [
-                                                                    [
-                                                                        {
-                                                                            "node":  "Commit Order Transaction",
-                                                                            "type":  "main",
-                                                                            "index":  0
-                                                                        }
-                                                                    ]
-                                                                ]
-                                                   },
-                        "Commit Order Transaction":  {
-                                                         "main":  [
-                                                                      [
-                                                                          {
-                                                                              "node":  "Attach Commit Result",
-                                                                              "type":  "main",
-                                                                              "index":  0
-                                                                          }
-                                                                      ]
-                                                                  ]
-                                                     },
-                        "Attach Commit Result":  {
-                                                     "main":  [
-                                                                  [
-                                                                      {
-                                                                          "node":  "Notify Processed",
-                                                                          "type":  "main",
-                                                                          "index":  0
-                                                                      }
-                                                                  ]
-                                                              ]
-                                                 },
-                        "Notify Processed":  {
-                                                 "main":  [
-                                                              [
-                                                                  {
-                                                                      "node":  "Notification OK?",
-                                                                      "type":  "main",
-                                                                      "index":  0
-                                                                  }
-                                                              ]
-                                                          ]
-                                             },
-                        "Notification OK?":  {
-                                                 "main":  [
-                                                              [
-                                                                  {
-                                                                      "node":  "Respond Success",
-                                                                      "type":  "main",
-                                                                      "index":  0
-                                                                  }
-                                                              ],
-                                                              [
-                                                                  {
-                                                                      "node":  "Record Notification Failure",
-                                                                      "type":  "main",
-                                                                      "index":  0
-                                                                  }
-                                                              ]
-                                                          ]
-                                             },
-                        "Record Notification Failure":  {
-                                                            "main":  [
-                                                                         [
-                                                                             {
-                                                                                 "node":  "Respond Success",
-                                                                                 "type":  "main",
-                                                                                 "index":  0
-                                                                             }
-                                                                         ]
-                                                                     ]
-                                                        }
-                    },
-    "active":  false,
-    "settings":  {
-                     "executionOrder":  "v1",
-                     "errorWorkflow":  ""
-                 },
-    "versionId":  "72c7e6bb-1403-58c0-b1ea-c9863c94ef77",
-    "meta":  {
-                 "templateCredsSetupCompleted":  false
-             },
-    "tags":  [
-
-             ],
-    "id":  "3e7b03e1-93af-4a51-8a16-819aff10b352"
+  "id": "3e7b03e1-93af-4a51-8a16-819aff10b352",
+  "name": "E-commerce Order Intake - Reliability Demo",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ecommerce-order-intake",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a6575cf7-645a-52ff-8290-05ec13b03e6d",
+      "name": "Order Intake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1320,
+        0
+      ],
+      "webhookId": "ed3c7b25-1134-54cd-8704-e6af34a8cb83"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.body ?? $json;\nconst source = String(input.source ?? '').toLowerCase();\nconst p = input.payload ?? input;\nlet c = { source, raw_payload: p };\nif (source === 'shopify') {\n  const li = (p.line_items ?? [])[0] ?? {};\n  Object.assign(c, { external_order_id:p.id, customer_email:p.email, sku:li.sku, quantity:li.quantity, unit_price:li.price, currency:p.currency, order_status:p.financial_status, created_at:p.created_at, integration_mode:p.integration_mode ?? 'normal', notification_mode:p.notification_mode ?? 'normal' });\n} else if (source === 'amazon') {\n  Object.assign(c, { external_order_id:p.amazon_order_id, customer_email:p.buyer_email, sku:p.seller_sku, quantity:p.item_quantity, unit_price:p.item_price, currency:p.currency_code, order_status:p.order_status, created_at:p.purchase_date, integration_mode:p.integration_mode ?? 'normal', notification_mode:p.notification_mode ?? 'normal' });\n} else if (source === 'marketplace') {\n  Object.assign(c, { external_order_id:p.order_no, customer_email:p.email, sku:p.product_sku, quantity:p.qty, unit_price:p.price, currency:p.currency, order_status:p.status, created_at:p.created, integration_mode:p.integration_mode ?? 'normal', notification_mode:p.notification_mode ?? 'normal' });\n} else {\n  c = { ...c, ...p };\n}\nc.external_order_id = String(c.external_order_id ?? '').trim();\nc.customer_email = String(c.customer_email ?? '').trim().toLowerCase();\nc.sku = String(c.sku ?? '').trim();\nc.currency = String(c.currency ?? '').trim().toUpperCase();\nc.order_status = String(c.order_status ?? '').trim().toLowerCase();\nc.order_key = `${c.source}:${c.external_order_id}`;\nc.quantity = Number(c.quantity);\nc.unit_price = Number(c.unit_price);\nc.payload_b64 = Buffer.from(JSON.stringify(c), 'utf8').toString('base64');\nreturn [{json:c}];"
+      },
+      "id": "ef79053a-c71d-5bcf-a063-c3186a10104d",
+      "name": "Normalize Incoming Order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $json;\nconst emailOk = /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(p.customer_email);\nlet error_code = null, error_message = null;\nif (['cancelled','canceled'].includes(p.order_status)) { error_code='ORDER_CANCELLED'; error_message='Cancelled orders are excluded from normal processing'; }\nelse if (!p.external_order_id || !p.customer_email || !p.sku || !p.created_at) { error_code='MISSING_FIELD'; error_message='Required order field is missing'; }\nelse if (!emailOk) { error_code='MALFORMED_EMAIL'; error_message='Customer email is malformed'; }\nelse if (!Number.isFinite(p.quantity)) { error_code='MALFORMED_INPUT'; error_message='Quantity is not numeric'; }\nelse if (p.quantity <= 0) { error_code='INVALID_QUANTITY'; error_message='Quantity must be greater than zero'; }\nelse if (!Number.isFinite(p.unit_price) || p.unit_price < 0) { error_code='MALFORMED_INPUT'; error_message='Unit price is invalid'; }\nelse if (!['KRW','USD','JPY','EUR'].includes(p.currency)) { error_code='INVALID_CURRENCY'; error_message='Unsupported currency'; }\nreturn [{json:{...p, validation_status:error_code ? 'invalid' : 'valid', error_code, error_message}}];"
+      },
+      "id": "86c6301b-c667-5943-9a2c-4bdc6b3b1b31",
+      "name": "Validate Canonical Order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b6c59bcd-ac94-56e2-a5c1-b4b8f95c9ed9",
+              "leftValue": "={{ $json.validation_status }}",
+              "rightValue": "valid",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9b484d17-e5da-5a55-8839-f379a719cfd3",
+      "name": "Validation Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -650,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT record_exception_b64($1, $2, $3);",
+        "options": {
+          "queryReplacement": "={{ $json.payload_b64 }},={{ $json.error_code }},={{ $json.error_message }}"
+        }
+      },
+      "id": "3518010f-3ad0-5477-8ce3-86c5f261e1fb",
+      "name": "Record Validation Exception",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -400,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO processed_events(event_key, order_key) VALUES($1,$1) ON CONFLICT(event_key) DO UPDATE SET last_seen_at=now(), delivery_count=processed_events.delivery_count+1; SELECT EXISTS(SELECT 1 FROM orders WHERE order_key = $1) AS is_duplicate;",
+        "options": {
+          "queryReplacement": "={{ $json.order_key }}"
+        }
+      },
+      "id": "03a4f232-3b06-5690-8485-fec6f4b4df4c",
+      "name": "Check Idempotency",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -400,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Validate Canonical Order').first().json; return [{json:{...p,is_duplicate:Boolean($json.is_duplicate)}}];"
+      },
+      "id": "de3d1569-1ceb-5c6c-ae0b-f774e1118dcc",
+      "name": "Attach Duplicate Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -180,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5b465bed-dba3-5e7f-964e-1d580cb3ad36",
+              "leftValue": "={{ $json.is_duplicate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d0ea61e5-c2fd-5031-a6c8-99403b02e108",
+      "name": "Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        40,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT record_exception_b64($1, 'DUPLICATE_ORDER', 'Order already processed; duplicate delivery ignored');",
+        "options": {
+          "queryReplacement": "={{ $json.payload_b64 }}"
+        }
+      },
+      "id": "577b789d-9ecb-53be-99e7-6900eeb79171",
+      "name": "Record Duplicate",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT $1::text AS sku, $2::integer AS requested_quantity, EXISTS(SELECT 1 FROM sku_master WHERE sku=$1 AND active) AS sku_exists, COALESCE((SELECT available_quantity FROM inventory WHERE sku=$1),0) AS available_quantity;",
+        "options": {
+          "queryReplacement": "={{ $json.sku }},={{ $json.quantity }}"
+        }
+      },
+      "id": "73b5f09c-53f2-5613-96e2-16ab2f1158fd",
+      "name": "Load SKU Inventory",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Validate Canonical Order').first().json; const exists=Boolean($json.sku_exists); const available=Number($json.available_quantity??0); let error_code=null,error_message=null; if(!exists){error_code='UNKNOWN_SKU';error_message='SKU does not exist in SKU master';} else if(available < p.quantity){error_code='INSUFFICIENT_STOCK';error_message='Warehouse stock is lower than requested quantity';} return [{json:{...p,inventory_status:error_code?'invalid':'valid',available_quantity:available,error_code,error_message}}];"
+      },
+      "id": "f5b0edd3-e60f-5807-9f2c-f1601c355d27",
+      "name": "Classify Inventory",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cb960b93-edc9-5526-b836-02388109cc36",
+              "leftValue": "={{ $json.inventory_status }}",
+              "rightValue": "valid",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "94cc5362-917d-5582-9561-7aa5e9d3cf95",
+      "name": "Inventory Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT record_exception_b64($1, $2, $3);",
+        "options": {
+          "queryReplacement": "={{ $json.payload_b64 }},={{ $json.error_code }},={{ $json.error_message }}"
+        }
+      },
+      "id": "2523b303-6428-5ecd-aea4-08e69508a4eb",
+      "name": "Record Inventory Exception",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mock-api:3000/api/warehouse/reserve",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({order_key: $json.order_key, sku: $json.sku, quantity: $json.quantity, mode: $json.integration_mode}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 1200
+        }
+      },
+      "id": "85d318ef-e01a-5d9e-bf64-58a88a6751e4",
+      "name": "Warehouse Reserve Attempt 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        920,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Classify Inventory').first().json; const status=Number($json.statusCode ?? 599); return [{json:{...p,http_status:status,attempt:1,api_ok:status>=200&&status<300,api_permanent:status>=400&&status<500}}];"
+      },
+      "id": "bb7b5b5e-b1e5-583c-8857-9d32d241cf68",
+      "name": "Evaluate Attempt 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "262fc717-4e5d-5983-861d-57dc8096cbdd",
+              "leftValue": "={{ $json.api_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "57560b03-4724-5b4b-a6b2-5d34851764ee",
+      "name": "Attempt 1 Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1360,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "34513739-394b-5b0c-94ea-ddef80b45d46",
+              "leftValue": "={{ $json.api_permanent }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b7826140-3bb5-5b5d-b4c9-ebb7c7015027",
+      "name": "Attempt 1 Permanent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1570,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "seconds"
+      },
+      "id": "6277cb56-aef5-51a1-8ccd-3324e9bc3692",
+      "name": "Wait 1 Second",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1790,
+        -140
+      ],
+      "webhookId": "cac6314d-0369-5942-8daa-fe0aadf6aa18"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mock-api:3000/api/warehouse/reserve",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({order_key: $json.order_key, sku: $json.sku, quantity: $json.quantity, mode: $json.integration_mode}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 1200
+        }
+      },
+      "id": "3e0ab00d-9793-50c9-a060-5aa21db28e68",
+      "name": "Warehouse Reserve Attempt 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2010,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Classify Inventory').first().json; const status=Number($json.statusCode ?? 599); return [{json:{...p,http_status:status,attempt:2,api_ok:status>=200&&status<300,api_permanent:status>=400&&status<500}}];"
+      },
+      "id": "ec8d0f63-69b4-5e40-b43b-7c3411f12cd1",
+      "name": "Evaluate Attempt 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2230,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "67c1cf2d-6e72-590b-a67e-c5a06e2f2131",
+              "leftValue": "={{ $json.api_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9b1472c7-07c6-5ec5-8d4d-dee5079b39c0",
+      "name": "Attempt 2 Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2450,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "1b971543-d73c-5d46-a4fb-35bfee1c89fe",
+      "name": "Wait 2 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2670,
+        20
+      ],
+      "webhookId": "2def31b4-f685-5ec1-9c2d-7bce9cfed051"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mock-api:3000/api/warehouse/reserve",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({order_key: $json.order_key, sku: $json.sku, quantity: $json.quantity, mode: $json.integration_mode}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 1200
+        }
+      },
+      "id": "a5f7e5a0-8522-50cf-89b4-6cf119b0e986",
+      "name": "Warehouse Reserve Attempt 3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2890,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Classify Inventory').first().json; const status=Number($json.statusCode ?? 599); return [{json:{...p,http_status:status,attempt:3,api_ok:status>=200&&status<300,api_permanent:status>=400&&status<500}}];"
+      },
+      "id": "43a541ce-c631-5182-9b65-bc461c3536e9",
+      "name": "Evaluate Attempt 3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3110,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "eddb9b16-fcb4-56bf-9da1-3639025a3209",
+              "leftValue": "={{ $json.api_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0a533ba6-f864-5196-ad19-244adc013164",
+      "name": "Attempt 3 Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3330,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "id": "e6598e75-cb2a-52da-a44e-02efee71a573",
+      "name": "Wait 4 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3550,
+        180
+      ],
+      "webhookId": "cb7c92c4-3bbf-5eca-9675-ebeab087c2bb"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT record_failed_job_b64($1, 'API_TEMPORARY_FAILURE', 'Warehouse reservation failed after all retry attempts', $2::integer); SELECT record_exception_b64($1, 'API_TEMPORARY_FAILURE', 'Warehouse reservation did not recover');",
+        "options": {
+          "queryReplacement": "={{ $json.payload_b64 }},={{ $json.attempt }}",
+          "queryBatching": "transaction"
+        }
+      },
+      "id": "5070bca1-6897-5587-8cc3-60b4f2ad8479",
+      "name": "Dead Letter Failure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3770,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT record_failed_job_b64($1, 'API_PERMANENT_FAILURE', 'Warehouse API returned a non-retryable 4xx response', 1); SELECT record_exception_b64($1, 'API_PERMANENT_FAILURE', 'Warehouse reservation rejected permanently');",
+        "options": {
+          "queryReplacement": "={{ $json.payload_b64 }}",
+          "queryBatching": "transaction"
+        }
+      },
+      "id": "0a5d1bae-e2bc-5d2f-a346-e5b126f9c8ce",
+      "name": "Permanent Failure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1790,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Classify Inventory').first().json; return [{json:{...p,retry_recovered:false}}];"
+      },
+      "id": "19ec0181-34f3-57c6-9e96-9ccea0c61f12",
+      "name": "Mark First Attempt Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1570,
+        -420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Classify Inventory').first().json; return [{json:{...p,retry_recovered:true}}];"
+      },
+      "id": "2b02a97c-d3d8-5c8e-af98-f6539cfdd915",
+      "name": "Mark Retry Recovered 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2670,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Classify Inventory').first().json; return [{json:{...p,retry_recovered:true}}];"
+      },
+      "id": "0e82caaf-4ba4-548e-b107-95eb73a078e2",
+      "name": "Mark Retry Recovered 3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3550,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT reserve_inventory_and_insert_order_b64($1, $2::boolean) AS result, $2::boolean AS retry_recovered;",
+        "options": {
+          "queryReplacement": "={{ $json.payload_b64 }},={{ $json.retry_recovered }}",
+          "queryBatching": "transaction"
+        }
+      },
+      "id": "e3c69d3e-b081-535d-b37d-b6fb69f5d285",
+      "name": "Commit Order Transaction",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3990,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Classify Inventory').first().json; return [{json:{...p,db_result:$json.result,retry_recovered:Boolean($json.retry_recovered)}}];"
+      },
+      "id": "11b58a5d-ecdd-5bc0-ab06-67c1d26e4ca4",
+      "name": "Attach Commit Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4210,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mock-api:3000/api/notify",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({event:\"order_processed\",order_key:$json.order_key,mode:$json.notification_mode}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 2000
+        }
+      },
+      "id": "50cf282e-51c3-59e3-83d0-d9787233a861",
+      "name": "Notify Processed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4430,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b8c6ec47-4f7a-548f-9364-7f61bbc0c90c",
+              "leftValue": "={{ $json.statusCode >= 200 && $json.statusCode < 300 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6b2ef279-0cb3-599e-b339-edfdfc1e12c1",
+      "name": "Notification OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4650,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT record_exception_b64($1, 'NOTIFICATION_FAILURE', 'Order was stored but downstream notification failed');",
+        "options": {
+          "queryReplacement": "={{ $('Classify Inventory').first().json.payload_b64 }}"
+        }
+      },
+      "id": "6c53f544-8ea1-5745-abe9-4010b046e53e",
+      "name": "Record Notification Failure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4870,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {ok:true,order_key:$(\"Classify Inventory\").first().json.order_key,status:\"processed\"} }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "2d77eefc-1feb-592e-880b-1134c9a82d6e",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        4870,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {ok:false,order_key:$(\"Validate Canonical Order\").first().json.order_key,status:\"exception\"} }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "e81d8245-109a-54ec-9b19-a0a7b45ffc0f",
+      "name": "Respond Exception",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        620,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {ok:false,order_key:$(\"Classify Inventory\").first().json.order_key,status:\"dead_letter\"} }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "93211f9c-6182-56d6-979b-4153552c0753",
+      "name": "Respond Failure",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        3990,
+        180
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Order Intake Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Incoming Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Incoming Order": {
+      "main": [
+        [
+          {
+            "node": "Validate Canonical Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Canonical Order": {
+      "main": [
+        [
+          {
+            "node": "Validation Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Passed?": {
+      "main": [
+        [
+          {
+            "node": "Check Idempotency",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Validation Exception",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Validation Exception": {
+      "main": [
+        [
+          {
+            "node": "Respond Exception",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Idempotency": {
+      "main": [
+        [
+          {
+            "node": "Attach Duplicate Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Duplicate Result": {
+      "main": [
+        [
+          {
+            "node": "Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "Record Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load SKU Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Duplicate": {
+      "main": [
+        [
+          {
+            "node": "Respond Exception",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load SKU Inventory": {
+      "main": [
+        [
+          {
+            "node": "Classify Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Inventory": {
+      "main": [
+        [
+          {
+            "node": "Inventory Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inventory Valid?": {
+      "main": [
+        [
+          {
+            "node": "Warehouse Reserve Attempt 1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Inventory Exception",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Inventory Exception": {
+      "main": [
+        [
+          {
+            "node": "Respond Exception",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Warehouse Reserve Attempt 1": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Attempt 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Attempt 1": {
+      "main": [
+        [
+          {
+            "node": "Attempt 1 Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attempt 1 Success?": {
+      "main": [
+        [
+          {
+            "node": "Mark First Attempt Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Attempt 1 Permanent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attempt 1 Permanent?": {
+      "main": [
+        [
+          {
+            "node": "Permanent Failure",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 1 Second",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 1 Second": {
+      "main": [
+        [
+          {
+            "node": "Warehouse Reserve Attempt 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Warehouse Reserve Attempt 2": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Attempt 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Attempt 2": {
+      "main": [
+        [
+          {
+            "node": "Attempt 2 Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attempt 2 Success?": {
+      "main": [
+        [
+          {
+            "node": "Mark Retry Recovered 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 2 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2 Seconds": {
+      "main": [
+        [
+          {
+            "node": "Warehouse Reserve Attempt 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Warehouse Reserve Attempt 3": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Attempt 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Attempt 3": {
+      "main": [
+        [
+          {
+            "node": "Attempt 3 Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attempt 3 Success?": {
+      "main": [
+        [
+          {
+            "node": "Mark Retry Recovered 3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 4 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 4 Seconds": {
+      "main": [
+        [
+          {
+            "node": "Dead Letter Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Permanent Failure": {
+      "main": [
+        [
+          {
+            "node": "Respond Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dead Letter Failure": {
+      "main": [
+        [
+          {
+            "node": "Respond Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark First Attempt Success": {
+      "main": [
+        [
+          {
+            "node": "Commit Order Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Retry Recovered 2": {
+      "main": [
+        [
+          {
+            "node": "Commit Order Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Retry Recovered 3": {
+      "main": [
+        [
+          {
+            "node": "Commit Order Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Commit Order Transaction": {
+      "main": [
+        [
+          {
+            "node": "Attach Commit Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Commit Result": {
+      "main": [
+        [
+          {
+            "node": "Notify Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Processed": {
+      "main": [
+        [
+          {
+            "node": "Notification OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notification OK?": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Notification Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Notification Failure": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": ""
+  },
+  "versionId": "72c7e6bb-1403-58c0-b1ea-c9863c94ef77",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
 }

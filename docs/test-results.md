@@ -1,10 +1,10 @@
 # Verification Results
 
-Date: 2026-09-03
-Dataset: 42 synthetic orders
+Updated: 2026-09-07  
+Dataset: synthetic demo data only  
 No real customer or production data was used.
 
-## Executed in the artifact environment
+## Deterministic repository harness
 
 | Test | Assertion | Result |
 |---|---|---|
@@ -18,7 +18,7 @@ No real customer or production data was used.
 | H | Full dataset re-run leaves order count and inventory unchanged | PASS |
 | I | Summary metrics reconcile to database queries | PASS |
 
-## First-run synthetic result
+First-run deterministic result:
 
 - Fixture rows: **42**
 - Orders processed: **26**
@@ -30,34 +30,36 @@ No real customer or production data was used.
 
 Machine-readable evidence: `generated/smoke-report.json`.
 
-## Workflow checks
+## Live n8n/PostgreSQL pre-upgrade baseline
 
-`node scripts/verify-workflows.mjs` passed and verifies:
+A real local n8n + PostgreSQL + mock-API run completed Tests A-I **9/9 PASS** before the P12 runtime upgrade. Representative runtime evidence included normal processing, duplicate suppression, validation failures, unknown SKU, insufficient inventory, retry recovery, exhausted retry dead-lettering, re-run safety, and database-to-daily-summary reconciliation.
 
-- all three workflow JSON files parse
-- all connection targets exist
-- intake workflow contains Webhook, Code, Postgres, HTTP Request, and Wait nodes
-- explicit 1s / 2s / 4s retry waits exist
-- duplicate, inventory exception, dead-letter, transaction, and notification-failure nodes exist
-- daily workflow includes a Schedule Trigger
-- no obvious hard-coded API token/password pattern exists in workflow JSON
+Database-derived totals from that synthetic run:
 
-## Environment-dependent check not executed here
+- Successful orders: **5**
+- Exceptions: **9**
+- Cancelled: **1**
+- Duplicates ignored: **2**
+- Retry recovered: **1**
+- Permanent failures: **4**
 
-A live **n8n 2.37.7 CLI import** was not executed in this artifact sandbox because Docker is unavailable and outbound npm registry access timed out. This is intentionally not reported as PASS.
+The daily summary returned the same six values. This baseline is historical evidence only; it must not be presented as post-upgrade verification.
 
-On a Docker-enabled machine, run:
+## P10-P12 repository/static verification
 
-```bash
-docker compose up -d
-./scripts/import-workflows.sh
-```
+The current repository is checked for:
 
-or on PowerShell:
+- valid JSON and canonical top-level workflow `id` / `versionId` fields
+- exact ASCII-safe workflow names
+- no n8n `.item` paired-item references in exports or generator
+- no blocked `$env` expressions in exports or generator
+- no broken `??` name substitutions
+- no committed `.env` or embedded credential/token patterns
+- UTF-8 without BOM for repository-generated workflow/fixture files
+- PostgreSQL 17.11 Compose target with a fresh `postgres17_data` volume key
+- pinned n8n 2.37.10 image
+- deterministic generator/export consistency
 
-```powershell
-docker compose up -d
-.\scripts\import-workflows.ps1
-```
+## Post-upgrade live verification status
 
-A portfolio screenshot should only be captured after this live import and execution succeeds.
+P13 is still required after pulling these changes locally. The required live sequence is: stack start, workflow import/credential setup/publish, normal order, duplicate, retry recovery, always-500 dead letter, daily summary reconciliation, and re-run safety. Do not label the PostgreSQL 17.11 runtime PASS until those checks complete.
