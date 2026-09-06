@@ -19,7 +19,20 @@
       "typeVersion": 1.2,
       "position": [
         -560,
-        0
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "35d9594c-168c-51ac-af60-2fcdba4b0ca1",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -560,
+        100
       ]
     },
     {
@@ -81,6 +94,17 @@
   "pinData": {},
   "connections": {
     "Daily 09:00": {
+      "main": [
+        [
+          {
+            "node": "Query Daily Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
       "main": [
         [
           {

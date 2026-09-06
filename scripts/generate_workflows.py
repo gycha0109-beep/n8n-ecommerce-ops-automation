@@ -148,11 +148,12 @@ write('ecommerce-error-handler.json',{'id':'e0f539bd-1abc-405c-a4f8-7e8861ac83bc
 
 # Daily summary calculated from DB, never hard-coded.
 sumnodes=[
- node('Daily 09:00','n8n-nodes-base.scheduleTrigger',1.2,-560,0,{'rule':{'interval':[{'field':'cronExpression','expression':'0 9 * * *'}]}}),
+ node('Daily 09:00','n8n-nodes-base.scheduleTrigger',1.2,-560,-100,{'rule':{'interval':[{'field':'cronExpression','expression':'0 9 * * *'}]}}),
+ node('When Executed by Another Workflow','n8n-nodes-base.executeWorkflowTrigger',1.1,-560,100,{'inputSource':'passthrough'}),
  node('Query Daily Summary','n8n-nodes-base.postgres',2.5,-320,0,{'operation':'executeQuery','query':"SELECT (SELECT count(*) FROM orders WHERE processed_at >= date_trunc('day', now()))::int AS successful, (SELECT count(*) FROM exceptions WHERE created_at >= date_trunc('day', now()))::int AS exceptions, (SELECT count(*) FROM exceptions WHERE created_at >= date_trunc('day', now()) AND error_code='ORDER_CANCELLED')::int AS cancelled, (SELECT count(*) FROM exceptions WHERE created_at >= date_trunc('day', now()) AND error_code='DUPLICATE_ORDER')::int AS duplicates_ignored, (SELECT count(*) FROM orders WHERE processed_at >= date_trunc('day', now()) AND retry_recovered)::int AS retry_recovered, (SELECT count(*) FROM failed_jobs WHERE created_at >= date_trunc('day', now()) AND status='dead_letter')::int AS permanent_failures;",'options':{}}),
  node('Build Summary Message','n8n-nodes-base.code',2,-80,0,{'jsCode':"return [{json:{event:'daily_summary',date:new Date().toISOString().slice(0,10),...$json}}];"}),
  node('Send Summary','n8n-nodes-base.httpRequest',4.3,180,0,{'method':'POST','url':'http://mock-api:3000/api/notify','sendBody':True,'contentType':'raw','rawContentType':'application/json','body':'={{ JSON.stringify($json) }}','options':{'response':{'response':{'fullResponse':True,'neverError':True}},'timeout':2000}})
 ]
-sumcon={'Daily 09:00':{'main':[[{'node':'Query Daily Summary','type':'main','index':0}]]},'Query Daily Summary':{'main':[[{'node':'Build Summary Message','type':'main','index':0}]]},'Build Summary Message':{'main':[[{'node':'Send Summary','type':'main','index':0}]]}}
+sumcon={'Daily 09:00':{'main':[[{'node':'Query Daily Summary','type':'main','index':0}]]},'When Executed by Another Workflow':{'main':[[{'node':'Query Daily Summary','type':'main','index':0}]]},'Query Daily Summary':{'main':[[{'node':'Build Summary Message','type':'main','index':0}]]},'Build Summary Message':{'main':[[{'node':'Send Summary','type':'main','index':0}]]}}
 write('ecommerce-daily-summary.json',{'id':'83131f1e-3aba-4e04-a3b6-bc1946c30661','name':'E-commerce Daily Summary','nodes':sumnodes,'pinData':{},'connections':sumcon,'active':False,'settings':{'executionOrder':'v1','timezone':'Asia/Seoul'},'versionId':uid('sum-version'),'meta':{'templateCredsSetupCompleted':False},'tags':[]})
 print('generated workflows')

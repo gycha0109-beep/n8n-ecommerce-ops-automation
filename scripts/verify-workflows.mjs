@@ -63,6 +63,10 @@ for (const node of errorWorkflow.nodes.filter((node) => node.type === 'n8n-nodes
 }
 const summary = loaded[2][1];
 if (!summary.nodes.some((node) => node.type === 'n8n-nodes-base.scheduleTrigger')) throw new Error('summary: no schedule trigger');
+const executeTrigger = summary.nodes.find((node) => node.type === 'n8n-nodes-base.executeWorkflowTrigger');
+if (!executeTrigger || executeTrigger.typeVersion !== 1.1 || executeTrigger.parameters?.inputSource !== 'passthrough') {
+  throw new Error('summary: no CLI-compatible execute workflow trigger');
+}
 for (const node of summary.nodes.filter((node) => node.type === 'n8n-nodes-base.httpRequest')) {
   if (!String(node.parameters.url ?? '').startsWith('http://mock-api:3000/')) throw new Error(`summary: unexpected mock URL in ${node.name}`);
 }
