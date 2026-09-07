@@ -1,10 +1,60 @@
 # E-commerce Order & Inventory Exception Automation
 
-A production-oriented **n8n e-commerce operations portfolio** built around failure handling, idempotency, inventory safety, and auditability rather than only happy-path node chaining.
+A production-oriented **n8n + PostgreSQL reliability portfolio** for multi-channel e-commerce operations.
 
-It normalizes Shopify-like webhook payloads and two marketplace CSV schemas, rejects permanent business errors, protects against duplicate processing, checks stock, retries temporary warehouse failures, dead-letters exhausted jobs, records exceptions, and sends a database-derived daily summary.
+The project is deliberately built around failure handling rather than only happy-path node chaining: canonical normalization, validation, idempotency, inventory safety, bounded retries, permanent-vs-temporary failure classification, dead-letter handling, transactional writes, exception audit trails, and a database-derived daily summary.
 
-> **Synthetic data only.** Every order, email, SKU, inventory value, failure, and result in this repository is fabricated for demonstration. This repository makes no production ROI, accounting, tax, or real-client claims.
+> **Synthetic data only.** Every order, email, SKU, inventory value, failure, and result in this repository is fabricated for demonstration. This repository makes no real-client, production-uptime, accounting, tax, or ROI claims.
+
+## Visual proof
+
+### Published n8n workflows
+
+All three portfolio workflows are imported and published in the local Docker deployment.
+
+![Published n8n workflows](screenshots/07-n8n-overview.png)
+
+### Full intake workflow
+
+The main workflow covers normalization → validation → idempotency → inventory checks → warehouse integration → bounded retry → transactional commit → notification, with controlled exception and dead-letter branches.
+
+![Full intake workflow](screenshots/01-workflow-overview.png)
+
+## Verified execution paths
+
+### 1. Normal order → committed and notified
+
+A synthetic Shopify-like order reaches `Commit Order Transaction`, sends the processed notification, and returns a successful webhook response.
+
+![Successful order execution](screenshots/03-success-execution.png)
+
+### 2. Duplicate delivery → idempotently ignored
+
+The same order is delivered again. The workflow executes `Check Idempotency → Attach Duplicate Result → Duplicate? → Record Duplicate → Respond Exception` instead of mutating order or inventory state again.
+
+![Duplicate idempotency execution](screenshots/04-duplicate-idempotency.png)
+
+### 3. Temporary warehouse failure → retry recovery
+
+The deterministic mock warehouse fails twice and succeeds on the third attempt. The execution visibly passes through a 1-second wait and a 2-second wait before `Mark Retry Recovered 3`, transaction commit, notification, and success response.
+
+![Retry recovery first half](screenshots/02-retry-recovery-1.png)
+
+![Retry recovery second half](screenshots/02-retry-recovery-2.png)
+
+### 4. Exhausted temporary failure → dead letter
+
+The warehouse returns temporary failure for every attempt. The workflow follows bounded backoff `1s → 2s → 4s`, writes the failed job, and returns a controlled dead-letter response rather than silently dropping the order.
+
+![Dead-letter execution](screenshots/05-dead-letter.png)
+
+### 5. Database-derived daily summary
+
+The scheduled workflow queries PostgreSQL for the current **Asia/Seoul** day and builds the summary from stored state rather than hard-coded demo values.
+
+![Daily summary execution](screenshots/06-daily-summary.png)
+
+The screenshot reflects the local demonstration session at capture time. CI runtime-regression totals are independently generated from its own isolated synthetic scenario set.
 
 ## Problem
 
@@ -22,7 +72,7 @@ Multi-channel order operations commonly fail in ways that basic automations hide
 - no exception queue or dead-letter trail
 - summary reports that do not reconcile to stored data
 
-This demo treats those as first-class workflow states.
+This demo treats those conditions as explicit workflow states.
 
 ## Architecture
 
@@ -60,16 +110,16 @@ Detailed design: [`docs/architecture.md`](docs/architecture.md)
 
 ## Reliability features
 
-- **Canonical schema** with explicit per-source mapping inside n8n.
+- **Canonical schema:** explicit per-source mapping inside n8n.
 - **Idempotency key:** `source + ':' + external_order_id`.
 - **Defense in depth:** workflow pre-check plus `orders.order_key UNIQUE`.
-- **Transactional inventory:** `SELECT ... FOR UPDATE`, inventory decrement, and order insert are one PostgreSQL function transaction.
-- **Permanent vs temporary failure classification:** validation/4xx are not retried; 5xx/timeouts are.
+- **Transactional inventory:** row lock, inventory decrement, and order insert occur inside one PostgreSQL function transaction.
+- **Failure classification:** validation and integration 4xx failures are permanent; temporary 5xx/timeout-style failures use bounded retry.
 - **Bounded retry chain:** attempt 1 → wait 1s → attempt 2 → wait 2s → attempt 3 → wait 4s → dead-letter.
-- **Post-commit notification isolation:** a notification failure records `NOTIFICATION_FAILURE` instead of rolling back a valid order.
-- **Audit trail:** `exceptions`, `failed_jobs`, `processed_events`, `workflow_runs`.
-- **Global workflow error handler:** unexpected n8n execution errors route to a separate failure workflow.
-- **Database-derived daily summary:** no hard-coded demo totals.
+- **Post-commit notification isolation:** notification failure records `NOTIFICATION_FAILURE` instead of rolling back a valid order.
+- **Audit trail:** `exceptions`, `failed_jobs`, `processed_events`, and `workflow_runs`.
+- **Global error workflow:** unexpected n8n execution errors route to a dedicated handler.
+- **Database-derived summary:** daily totals are calculated from persisted state using `Asia/Seoul` day boundaries.
 
 ## Canonical order schema
 
@@ -91,38 +141,18 @@ Detailed design: [`docs/architecture.md`](docs/architecture.md)
 ## Tech stack
 
 - n8n **2.37.10** pinned Docker image
-- PostgreSQL **17.11** pinned Alpine image / Supabase-compatible SQL
+- PostgreSQL **17.11** pinned Alpine image
 - Node.js 22 mock API
-- TypeScript source with dependency-free prebuilt JS runtime
+- TypeScript mock-service source with prebuilt JS runtime
 - Python 3 standard-library deterministic smoke harness
 - Docker Compose for reproducible local topology
-- GitHub Actions for deterministic contract and live container regression
+- GitHub Actions for deterministic repository checks and live container regression
 
-## Quick start — deterministic smoke test
+## Automated verification
 
-This test does **not** require Docker, external SaaS, Google, Slack, or npm packages.
+### Deterministic 42-fixture harness
 
-### Windows PowerShell
-
-```powershell
-cd n8n-ecommerce-ops-automation
-.\scripts\run-smoke.ps1
-```
-
-If Windows PowerShell 5.1 blocks local scripts, enable them only for the current shell:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-```
-
-Repository JSON/workflow files are UTF-8 **without BOM**. On Windows PowerShell 5.1, avoid rewriting JSON with `Set-Content -Encoding UTF8`, which adds a BOM; use a BOM-less UTF-8 writer instead.
-
-### macOS / Linux / Git Bash
-
-```bash
-cd n8n-ecommerce-ops-automation
-./scripts/run-smoke.sh
-```
+The repository includes 42 synthetic rows across Shopify-like, Amazon-like, and marketplace schemas.
 
 Expected checks:
 
@@ -138,71 +168,7 @@ Test H — Re-run safety: PASS
 Test I — Daily summary reconciliation: PASS
 ```
 
-The machine-readable report is written to `generated/smoke-report.json`. Full verification notes: [`docs/test-results.md`](docs/test-results.md).
-
-## Full n8n + PostgreSQL setup
-
-1. Copy environment values:
-
-```bash
-cp .env.example .env
-```
-
-On PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-2. Change at least `N8N_ENCRYPTION_KEY` and `POSTGRES_PASSWORD` in `.env`.
-
-3. Start the stack:
-
-```bash
-docker compose up -d
-```
-
-The n8n UI is available at `http://localhost:5678/` after the service is ready.
-
-### PostgreSQL 16 → 17 local demo reset
-
-The PostgreSQL 17 upgrade intentionally uses a new Compose volume key, `postgres17_data`. This avoids trying to open a PostgreSQL 16 data directory with PostgreSQL 17. Because this repository contains synthetic demo data, the new PostgreSQL 17 volume is initialized from `db/schema.sql` and `db/seed.sql`. A previous PostgreSQL 16 volume is not migrated automatically.
-
-4. Import the workflows:
-
-```bash
-docker compose exec -T n8n n8n import:workflow --input=/workflows/ecommerce-order-intake.json
-docker compose exec -T n8n n8n import:workflow --input=/workflows/ecommerce-error-handler.json
-docker compose exec -T n8n n8n import:workflow --input=/workflows/ecommerce-daily-summary.json
-```
-
-5. In n8n, create one **Postgres** credential pointing to the `ecommerce_ops` database and attach it to all Postgres nodes. Workflow JSON intentionally contains no credential ID, password, or API key.
-
-6. Set `E-commerce Ops - Global Error Handler` as the error workflow for the intake workflow, then publish/activate the required workflows.
-
-7. Send one fixture:
-
-```powershell
-.\scripts\send-webhook.ps1
-```
-
-Or send all 42 synthetic rows after the intake webhook is active:
-
-```bash
-python scripts/send-all-fixtures.py
-```
-
-## Synthetic fixture coverage
-
-The corpus contains **42 deterministic rows** across three source schemas, including normal orders, duplicates, cancellations, missing/unknown SKUs, invalid quantities, insufficient stock, malformed email/input, invalid currency, temporary failures, permanent failures, timeout behavior, and post-commit notification failure.
-
-See [`docs/failure-scenarios.md`](docs/failure-scenarios.md).
-
-## Verified synthetic results
-
-### Deterministic repository harness
-
-Generated from the 42 repository fixtures:
+Verified deterministic totals:
 
 | Metric | Result |
 |---|---:|
@@ -214,33 +180,33 @@ Generated from the 42 repository fixtures:
 | Retry recovered | 1 |
 | Dead-letter jobs | 2 |
 
-All Tests **A-I pass** in the deterministic contract harness. The harness replays the complete dataset against a cloned database and verifies that order count and inventory remain unchanged.
+The re-run safety check verifies that replaying the dataset does not change committed order count or inventory state.
 
-### Post-upgrade live n8n/PostgreSQL regression
+### Live n8n + PostgreSQL regression
 
-A GitHub-hosted Ubuntu runner executed the real Docker Compose topology at commit `9105fb0faaf2dcd00ccec9e62dfb20f38bd2a03f` in Actions run **34064393045**. The run used synthetic data only and completed successfully against **n8n 2.37.10** and **PostgreSQL 17.11**.
+GitHub Actions also starts the real Docker Compose topology and verifies **n8n 2.37.10 + PostgreSQL 17.11** end to end with ephemeral credentials.
 
-Verified paths:
+Covered paths include:
 
-- workflow structural/security verification
-- credential import and all three workflow imports
-- exact workflow names/IDs
-- workflow publish/activation
+- runtime version and database initialization checks
+- credential import
+- all three workflow imports with exact IDs/names
+- workflow publication/activation
 - normal order processing
 - duplicate suppression
-- unknown SKU exception
-- insufficient-stock exception
-- temporary failure recovery after retry
-- exhausted 500 failure → dead letter after 3 attempts
-- permanent 400 failure → dead letter without retry
-- cancelled-order exception
-- re-run safety with unchanged order count and inventory
+- unknown SKU and insufficient-stock handling
+- temporary failure recovery
+- exhausted 500-style failure → dead letter after 3 attempts
+- permanent 400-style failure → dead letter without retry
+- cancelled-order handling
+- re-run safety
 - database-derived Daily Summary reconciliation
-- Asia/Seoul calendar-date reconciliation
-- error-workflow binding
-- PostgreSQL compatibility log check
+- `Asia/Seoul` calendar-date reconciliation
+- global error-workflow binding
+- PostgreSQL compatibility-log check
+- runtime evidence artifact upload
 
-Database/Daily Summary totals for this focused P13 scenario set:
+The focused runtime scenario set reconciles to:
 
 | Metric | Result |
 |---|---:|
@@ -251,17 +217,76 @@ Database/Daily Summary totals for this focused P13 scenario set:
 | Retry recovered | 1 |
 | Permanent failures / dead-letter jobs | 2 |
 
-The Daily Summary produced the same six values for **2026-09-07 Asia/Seoul**. Runtime evidence was uploaded by the workflow as the `p13-runtime-evidence` artifact.
+See [`docs/test-results.md`](docs/test-results.md) for the evidence boundary and historical baseline.
 
-### Historical pre-upgrade baseline
+## Quick start
 
-A prior local synthetic run before the PostgreSQL 17.11 / n8n 2.37.10 upgrade produced 5 successful orders, 9 exceptions, 1 cancellation, 2 ignored duplicates, 1 retry recovery, and 4 permanent failures. It is retained only as historical evidence and is not used as the upgraded-runtime result.
+### Deterministic smoke test — Windows PowerShell
 
-## Verification scope
+```powershell
+cd n8n-ecommerce-ops-automation
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\run-smoke.ps1
+```
 
-- **Repository harness:** deterministic contract behavior over all 42 synthetic fixtures.
-- **Current live runtime:** actual n8n 2.37.10 + PostgreSQL 17.11 + mock API Docker topology in GitHub Actions.
-- **Evidence boundary:** these tests establish reproducible demo behavior; they do not establish customer-specific production performance, uptime, ROI, settlement correctness, or accounting correctness.
+### Deterministic smoke test — macOS / Linux / Git Bash
+
+```bash
+cd n8n-ecommerce-ops-automation
+./scripts/run-smoke.sh
+```
+
+### Full Docker deployment
+
+1. Create the local environment file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+2. Set real local values for at least `POSTGRES_PASSWORD` and `N8N_ENCRYPTION_KEY`.
+
+3. Start the topology:
+
+```powershell
+docker compose up -d
+```
+
+4. Open n8n at `http://localhost:5678/`.
+
+5. Import workflows:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\import-workflows.ps1
+```
+
+6. Create one **Postgres** credential in n8n:
+
+```text
+Host: postgres
+Port: 5432
+Database: ecommerce_ops
+User: ecommerce_ops
+Password: <POSTGRES_PASSWORD from local .env>
+SSL: Disable
+```
+
+Attach it to all Postgres nodes. Workflow JSON intentionally contains no credential ID, password, or API key.
+
+7. Set `E-commerce Ops - Global Error Handler` as the error workflow for the intake workflow and publish all three workflows.
+
+8. Send one synthetic fixture:
+
+```powershell
+.\scripts\send-webhook.ps1
+```
+
+## PostgreSQL 16 → 17 local demo reset
+
+The upgrade intentionally uses a new Compose volume key, `postgres17_data`. This prevents a PostgreSQL 17 server from opening a PostgreSQL 16 data directory.
+
+Because this repository contains synthetic demo data, the PostgreSQL 17 volume is initialized from `db/schema.sql` and `db/seed.sql`. This is **not** presented as a production database migration strategy; a real migration should use PostgreSQL-supported dump/restore or `pg_upgrade` procedures as appropriate.
 
 ## Exception codes
 
@@ -276,34 +301,32 @@ A prior local synthetic run before the PostgreSQL 17.11 / n8n 2.37.10 upgrade pr
 | `INVALID_QUANTITY` | quantity <= 0 | No |
 | `INSUFFICIENT_STOCK` | stock lower than requested quantity | No |
 | `INVALID_CURRENCY` | unsupported currency | No |
-| `API_TEMPORARY_FAILURE` | 5xx/timeout exhausted | Yes, bounded |
+| `API_TEMPORARY_FAILURE` | temporary integration failure exhausted | Yes, bounded |
 | `API_PERMANENT_FAILURE` | non-retryable integration response | No |
-| `NOTIFICATION_FAILURE` | downstream alert failed after DB commit | Separate follow-up |
+| `NOTIFICATION_FAILURE` | downstream notification failed after DB commit | Separate follow-up |
 | `WORKFLOW_EXECUTION_FAILURE` | unexpected n8n execution error | Error workflow |
-
-## Screenshots
-
-The repository intentionally does not fabricate n8n execution screenshots. [`screenshots/README.md`](screenshots/README.md) is the capture checklist for real UI evidence. GitHub Actions runtime logs/artifacts are automated evidence, not substitutes for screenshots in a visual portfolio presentation.
 
 ## Security notes
 
 - No credential IDs, tokens, API keys, or customer data are intended to be committed.
 - `.env` is ignored; `.env.example` contains placeholders only.
-- CI creates temporary random database/encryption credentials and removes the local `.env` during cleanup.
+- CI creates temporary random database/encryption credentials and destroys the runtime afterward.
 - SQL business inputs use query parameters.
 - Webhook authentication/signature verification is a **production requirement** and intentionally documented rather than faked in the local mock.
-- Raw payload retention and PII redaction must be adjusted to customer requirements.
+- Raw payload retention and PII redaction must be adapted to customer requirements.
+- Screenshot evidence intentionally avoids credential panels and secret values.
 
 ## Limitations
 
-- The mock warehouse API is deterministic and local; it does not model every vendor-specific timeout or rate-limit behavior.
-- CSV ingestion is row-based in the demo; a client delivery would usually ingest/download files inside n8n or from object storage/SFTP according to the source contract.
-- Manual review UI is represented by structured exception records/status fields; a customer-specific admin UI is outside this portfolio scope.
-- The current n8n container emits a Python task-runner availability warning. This demo executes JavaScript Code nodes and the verified P13 paths completed successfully; deployments that require Python task runners should configure the appropriate production runner topology.
-- The repository does not claim production merchant experience, production uptime, accounting/tax correctness, or financial ROI.
+- The warehouse and notification integrations are deterministic local mocks, not real merchant APIs.
+- CSV ingestion is row-based in the demo; a customer delivery would usually ingest/download files from the source system, object storage, or SFTP according to the real contract.
+- Manual review is represented by structured exception records/status fields; a customer-specific admin UI is outside this portfolio scope.
+- The current n8n container can emit a Python task-runner availability warning. Verified paths use JavaScript Code nodes; deployments requiring Python task runners should configure the appropriate production runner topology.
+- This repository does not claim production merchant experience, production uptime, settlement correctness, accounting/tax correctness, or financial ROI.
 
 ## Portfolio materials
 
+- [`screenshots/README.md`](screenshots/README.md) — verified UI evidence catalog
 - [`docs/architecture.md`](docs/architecture.md)
 - [`docs/failure-scenarios.md`](docs/failure-scenarios.md)
 - [`docs/test-results.md`](docs/test-results.md)
